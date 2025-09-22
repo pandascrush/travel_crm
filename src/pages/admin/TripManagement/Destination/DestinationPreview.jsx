@@ -23,6 +23,18 @@ const DestinationPreview = () => {
   const [destinationContent, setDestinationContent] = useState({});
   const [childDestination, setChildDestination] = useState({});
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Function to open the modal
+  const handleOpenModal = () => {
+    setIsModalOpen(true);
+  };
+
+  // Function to close the modal
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+  };
+
   const sectionTabs = [
     {
       id: 1,
@@ -133,7 +145,7 @@ const DestinationPreview = () => {
                 <a>{item.name}</a>
               </div>
             ))}
-            <button>Get Free Quote</button>
+            <button onClick={handleOpenModal}>Get Free Quote</button>
           </div>
         </div>
       </section>
@@ -1622,7 +1634,6 @@ const DestinationPreview = () => {
                     <h5 className="fw-bold text-center text-md-start mb-4">
                       Don’t Just Dream, Travel!🔥
                     </h5>
-                    <ContactForm />
                   </div>
                 </div>
               </div>
@@ -2429,6 +2440,11 @@ const DestinationPreview = () => {
       )}
 
       <Footer />
+
+       <ContactForm
+        isOpen={isModalOpen} 
+        onClose={handleCloseModal} 
+      />
     </div>
   );
 };

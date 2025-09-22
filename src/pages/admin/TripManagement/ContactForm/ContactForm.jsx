@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import './ContactForm.css'; // We'll create this CSS file
 
-export default function ContactForm() {
+const ContactForm = ({ isOpen, onClose }) => {
   const [formData, setFormData] = useState({
     destination: '',
     city: '',
@@ -21,7 +22,29 @@ export default function ContactForm() {
 
   // Regex patterns
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const phoneRegex = /^(\+\d{1,3}[- ]?)?\d{10}$/; // Supports international numbers
+  const phoneRegex = /^(\+\d{1,3}[- ]?)?\d{10}$/;
+
+  // Reset form when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        destination: '',
+        city: '',
+        departureType: 'fixed',
+        startDate: '',
+        endDate: '',
+        adults: '0',
+        children: '0',
+        infants: '0',
+        fullName: '',
+        email: '',
+        phone: '',
+        whatsapp: false,
+      });
+      setErrors({});
+      setIsSubmitted(false);
+    }
+  }, [isOpen]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -30,7 +53,6 @@ export default function ContactForm() {
       [name]: type === 'checkbox' ? checked : value,
     });
 
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors({
         ...errors,
@@ -49,17 +71,14 @@ export default function ContactForm() {
   const validateForm = () => {
     const newErrors = {};
 
-    // Destination validation
     if (!formData.destination.trim()) {
       newErrors.destination = 'Destination is required';
     }
 
-    // City validation
     if (!formData.city.trim()) {
       newErrors.city = 'City is required';
     }
 
-    // Date validation
     if (formData.departureType === 'fixed') {
       if (!formData.startDate) {
         newErrors.startDate = 'Start date is required';
@@ -76,7 +95,6 @@ export default function ContactForm() {
       }
     }
 
-    // People validation - at least one person
     if (
       formData.adults === '0' &&
       formData.children === '0' &&
@@ -85,19 +103,16 @@ export default function ContactForm() {
       newErrors.adults = 'At least one traveler is required';
     }
 
-    // Full name validation
     if (!formData.fullName.trim()) {
       newErrors.fullName = 'Full name is required';
     }
 
-    // Email validation
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!emailRegex.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    // Phone validation
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
     } else if (!phoneRegex.test(formData.phone.replace(/\s/g, ''))) {
@@ -112,337 +127,298 @@ export default function ContactForm() {
     const formErrors = validateForm();
 
     if (Object.keys(formErrors).length === 0) {
-      // Form is valid, proceed with submission
       console.log('Form submitted:', formData);
       setIsSubmitted(true);
-      // You would typically send the data to your backend here
     } else {
       setErrors(formErrors);
     }
   };
 
+  const handleClose = () => {
+    onClose();
+  };
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      handleClose();
+    }
+  };
+
+  // Don't render if modal is not open
+  if (!isOpen) return null;
+
   return (
-    <div className="container-fluid min-vh-100 d-flex justify-content-center align-items-center bg-light py-4">
-      <div className="row shadow rounded overflow-hidden w-100 mx-3" style={{ maxWidth: '1000px' }}>
-        <div className="col-12 d-md-none text-center py-3" style={{
-          background: 'linear-gradient(180deg, #EB662B 0%, #f28d5c 100%)',
-        }}>
-          <h3 className="fw-bold mb-0 text-white">TravelPro</h3>
-        </div>
-        
-        {/* Left Panel */}
-        <div
-          className="col-md-5 p-4 text-white d-none d-md-block"
-          style={{
-            background: 'linear-gradient(180deg, #EB662B 0%, #f28d5c 100%)',
-          }}
+    <div 
+      className="contact-form-modal-backdrop"
+      onClick={handleBackdropClick}
+    >
+      <div className="contact-form-modal-content">
+        {/* Close Button */}
+        <button
+          type="button"
+          className="contact-form-modal-close"
+          onClick={handleClose}
+          aria-label="Close"
         >
-          <h3 className="fw-bold mb-4">TravelPro</h3>
-          <p className="mb-4">Your Journey Starts Here</p>
+          ×
+        </button>
+        
+        <div className="contact-form-modal-container">
+          <div className="contact-form-left-panel">
+            <h3 className="contact-form-brand">TravelPro</h3>
+            <p className="contact-form-subtitle">Your Journey Starts Here</p>
 
-          <h5 className="fw-semibold mb-3">How It Works</h5>
-          <ul className="list-unstyled mb-5">
-            <li className="mb-3">
-              <span className="me-2">📍</span>
-              Select Your Tour
-            </li>
-            <li className="mb-3">
-              <span className="me-2">📋</span>
-              Get Multiple Free Quotes
-            </li>
-            <li className="mb-3">
-              <span className="me-2">✅</span>
-              Customize &amp; Book
-            </li>
-          </ul>
+            <h5 className="contact-form-section-title">How It Works</h5>
+            <ul className="contact-form-features-list">
+              <li className="contact-form-feature-item">
+                <span className="contact-form-icon">📍</span>
+                Select Your Tour
+              </li>
+              <li className="contact-form-feature-item">
+                <span className="contact-form-icon">📋</span>
+                Get Multiple Free Quotes
+              </li>
+              <li className="contact-form-feature-item">
+                <span className="contact-form-icon">✅</span>
+                Customize &amp; Book
+              </li>
+            </ul>
 
-          <div className="bg-white bg-opacity-10 rounded p-3 mb-4">
-            <p className="mb-1">
-              1500+ <small>Verified Agents</small>
-            </p>
-            <p className="mb-1">
-              100k+ <small>Happy Travellers</small>
-            </p>
-            <p className="mb-0">
-              190+ <small>Destinations</small>
-            </p>
-          </div>
-
-          <div className="bg-white bg-opacity-10 rounded p-3">
-            <span className="me-2">📞</span>
-            Need Help? Call Us
-            <br />
-            <span className="fw-bold">+1 (555) 123-4567</span>
-          </div>
-        </div>
-
-        {/* Right Panel */}
-        <div className="col-md-7 bg-white p-4">
-          {isSubmitted ? (
-            <div className="text-center py-4">
-              <div
-                className="text-success mb-3"
-                style={{ fontSize: '3rem' }}
-              >✅</div>
-              <h4 className="fw-bold mt-3">Thank You!</h4>
-              <p className="text-muted">
-                We've received your information and will contact you shortly to
-                plan your dream holiday.
-              </p>
+            <div className="contact-form-stats">
+              <p>1500+ <small>Verified Agents</small></p>
+              <p>100k+ <small>Happy Travellers</small></p>
+              <p>190+ <small>Destinations</small></p>
             </div>
-          ) : (
-            <>
-              <h4 className="fw-bold mb-1">Where do you want to go?</h4>
-              <p className="text-muted mb-4">
-                Tell us about your dream destination
-              </p>
 
-              <form onSubmit={handleSubmit}>
-                <div className="mb-3">
-                  <input
-                    type="text"
-                    className={`form-control ${
-                      errors.destination ? 'is-invalid' : ''
-                    }`}
-                    placeholder="Search Destination"
-                    name="destination"
-                    value={formData.destination}
-                    onChange={handleChange}
-                  />
-                  {errors.destination && (
-                    <div className="invalid-feedback">{errors.destination}</div>
-                  )}
-                </div>
-                <div className="mb-3">
-                  <input
-                    type="text"
-                    className={`form-control ${
-                      errors.city ? 'is-invalid' : ''
-                    }`}
-                    placeholder="Search City"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleChange}
-                  />
-                  {errors.city && (
-                    <div className="invalid-feedback">{errors.city}</div>
-                  )}
-                </div>
+            <div className="contact-form-help">
+              <span className="contact-form-icon">📞</span>
+              Need Help? Call Us
+              <br />
+              <span className="contact-form-phone">+1 (555) 123-4567</span>
+            </div>
+          </div>
 
-                {/* Departure toggle */}
-                <div className="d-flex gap-2 mb-3">
-                  <button
-                    type="button"
-                    className={`btn w-50 fw-bold ${
-                      formData.departureType === 'fixed'
-                        ? 'text-white'
-                        : 'text-dark'
-                    }`}
-                    style={{
-                      backgroundColor:
-                        formData.departureType === 'fixed'
-                          ? '#EB662B'
-                          : 'transparent',
-                      border:
-                        formData.departureType === 'fixed'
-                          ? '1px solid #EB662B'
-                          : '1px solid #ced4da',
-                    }}
-                    onClick={() => handleDepartureType('fixed')}
-                  >
-                    Fixed
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn w-50 fw-bold ${
-                      formData.departureType === 'flexible' ? 'text-white' : ''
-                    }`}
-                    style={{
-                      backgroundColor:
-                        formData.departureType === 'flexible'
-                          ? '#EB662B'
-                          : 'transparent',
-                      border:
-                        formData.departureType === 'flexible'
-                          ? '1px solid #EB662B'
-                          : '1px solid #ced4da',
-                      color:
-                        formData.departureType === 'flexible'
-                          ? 'white'
-                          : '#EB662B',
-                    }}
-                    onClick={() => handleDepartureType('flexible')}
-                  >
-                    Flexible
-                  </button>
-                </div>
-
-                {formData.departureType === 'fixed' && (
-                  <div className="row g-2 mb-3">
-                    <div className="col-md-6">
-                      <label className="form-label small text-muted">Start Date</label>
-                      <input
-                        type="date"
-                        className={`form-control ${
-                          errors.startDate ? 'is-invalid' : ''
-                        }`}
-                        name="startDate"
-                        value={formData.startDate}
-                        onChange={handleChange}
-                      />
-                      {errors.startDate && (
-                        <div className="invalid-feedback">
-                          {errors.startDate}
-                        </div>
-                      )}
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label small text-muted">End Date</label>
-                      <input
-                        type="date"
-                        className={`form-control ${
-                          errors.endDate ? 'is-invalid' : ''
-                        }`}
-                        name="endDate"
-                        value={formData.endDate}
-                        onChange={handleChange}
-                      />
-                      {errors.endDate && (
-                        <div className="invalid-feedback">{errors.endDate}</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Adults / Children / Infants */}
-                <div className="row g-2 mb-3">
-                  <div className="col-4">
-                    <label className="form-label small text-muted">Adults</label>
-                    <select
-                      className={`form-select ${
-                        errors.adults ? 'is-invalid' : ''
-                      }`}
-                      name="adults"
-                      value={formData.adults}
-                      onChange={handleChange}
-                    >
-                      <option value="0">0</option>
-                      {[...Array(10)].map((_, i) => (
-                        <option key={i} value={i+1}>
-                          {i+1}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-4">
-                    <label className="form-label small text-muted">Children</label>
-                    <select
-                      className="form-select"
-                      name="children"
-                      value={formData.children}
-                      onChange={handleChange}
-                    >
-                      <option value="0">0</option>
-                      {[...Array(10)].map((_, i) => (
-                        <option key={i} value={i+1}>
-                          {i+1}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-4">
-                    <label className="form-label small text-muted">Infants</label>
-                    <select
-                      className="form-select"
-                      name="infants"
-                      value={formData.infants}
-                      onChange={handleChange}
-                    >
-                      <option value="0">0</option>
-                      {[...Array(5)].map((_, i) => (
-                        <option key={i} value={i+1}>
-                          {i+1}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                {errors.adults && (
-                  <div className="text-danger small mb-3">{errors.adults}</div>
-                )}
-
-                <div className="mb-3">
-                  <input
-                    type="text"
-                    className={`form-control ${
-                      errors.fullName ? 'is-invalid' : ''
-                    }`}
-                    placeholder="Full Name"
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                  />
-                  {errors.fullName && (
-                    <div className="invalid-feedback">{errors.fullName}</div>
-                  )}
-                </div>
-                <div className="mb-3">
-                  <input
-                    type="email"
-                    className={`form-control ${
-                      errors.email ? 'is-invalid' : ''
-                    }`}
-                    placeholder="Email Address"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                  />
-                  {errors.email && (
-                    <div className="invalid-feedback">{errors.email}</div>
-                  )}
-                </div>
-                <div className="mb-3">
-                  <input
-                    type="tel"
-                    className={`form-control ${
-                      errors.phone ? 'is-invalid' : ''
-                    }`}
-                    placeholder="Phone Number"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                  />
-                  {errors.phone && (
-                    <div className="invalid-feedback">{errors.phone}</div>
-                  )}
-                </div>
-
-                <div className="form-check mb-3">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="whatsapp"
-                    name="whatsapp"
-                    checked={formData.whatsapp}
-                    onChange={handleChange}
-                  />
-                  <label className="form-check-label" htmlFor="whatsapp">
-                    I agree to Terms &amp; Get updates on WhatsApp
-                  </label>
-                </div>
-
+          <div className="contact-form-right-panel">
+            {isSubmitted ? (
+              <div className="contact-form-success">
+                <div className="success-icon">✅</div>
+                <h4 className="success-title">Thank You!</h4>
+                <p className="success-message">
+                  We've received your information and will contact you shortly to
+                  plan your dream holiday.
+                </p>
                 <button
-                  type="submit"
-                  className="btn w-100 fw-bold text-white py-2"
-                  style={{ backgroundColor: '#EB662B' }}
+                  className="success-close-btn"
+                  onClick={handleClose}
                 >
-                  Plan My Holidays
+                  Close
                 </button>
-              </form>
-            </>
-          )}
+              </div>
+            ) : (
+              <>
+                <h4 className="form-title">Where do you want to go?</h4>
+                <p className="form-subtitle">
+                  Tell us about your dream destination
+                </p>
+
+                <form onSubmit={handleSubmit} className="contact-form">
+                  <div className="form-group">
+                    <input
+                      type="text"
+                      className={`form-control ${errors.destination ? 'error' : ''}`}
+                      placeholder="Search Destination"
+                      name="destination"
+                      value={formData.destination}
+                      onChange={handleChange}
+                    />
+                    {errors.destination && (
+                      <div className="error-message">{errors.destination}</div>
+                    )}
+                  </div>
+                  
+                  <div className="form-group">
+                    <input
+                      type="text"
+                      className={`form-control ${errors.city ? 'error' : ''}`}
+                      placeholder="Search City"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleChange}
+                    />
+                    {errors.city && (
+                      <div className="error-message">{errors.city}</div>
+                    )}
+                  </div>
+
+                  {/* Departure toggle */}
+                  <div className="departure-toggle">
+                    <button
+                      type="button"
+                      className={`toggle-btn ${formData.departureType === 'fixed' ? 'active' : ''}`}
+                      onClick={() => handleDepartureType('fixed')}
+                    >
+                      Fixed
+                    </button>
+                    <button
+                      type="button"
+                      className={`toggle-btn ${formData.departureType === 'flexible' ? 'active' : ''}`}
+                      onClick={() => handleDepartureType('flexible')}
+                    >
+                      Flexible
+                    </button>
+                  </div>
+
+                  {formData.departureType === 'fixed' && (
+                    <div className="date-fields">
+                      <div className="form-group">
+                        <label className="form-label">Start Date</label>
+                        <input
+                          type="date"
+                          className={`form-control ${errors.startDate ? 'error' : ''}`}
+                          name="startDate"
+                          value={formData.startDate}
+                          onChange={handleChange}
+                        />
+                        {errors.startDate && (
+                          <div className="error-message">{errors.startDate}</div>
+                        )}
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">End Date</label>
+                        <input
+                          type="date"
+                          className={`form-control ${errors.endDate ? 'error' : ''}`}
+                          name="endDate"
+                          value={formData.endDate}
+                          onChange={handleChange}
+                        />
+                        {errors.endDate && (
+                          <div className="error-message">{errors.endDate}</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* People selection */}
+                  <div className="people-selection">
+                    <div className="form-group">
+                      <label className="form-label">Adults</label>
+                      <select
+                        className={`form-select ${errors.adults ? 'error' : ''}`}
+                        name="adults"
+                        value={formData.adults}
+                        onChange={handleChange}
+                      >
+                        <option value="0">0</option>
+                        {[...Array(10)].map((_, i) => (
+                          <option key={i} value={i+1}>{i+1}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Children</label>
+                      <select
+                        className="form-select"
+                        name="children"
+                        value={formData.children}
+                        onChange={handleChange}
+                      >
+                        <option value="0">0</option>
+                        {[...Array(10)].map((_, i) => (
+                          <option key={i} value={i+1}>{i+1}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Infants</label>
+                      <select
+                        className="form-select"
+                        name="infants"
+                        value={formData.infants}
+                        onChange={handleChange}
+                      >
+                        <option value="0">0</option>
+                        {[...Array(5)].map((_, i) => (
+                          <option key={i} value={i+1}>{i+1}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  
+                  {errors.adults && (
+                    <div className="error-message">{errors.adults}</div>
+                  )}
+
+                  <div className="form-group">
+                    <input
+                      type="text"
+                      className={`form-control ${errors.fullName ? 'error' : ''}`}
+                      placeholder="Full Name"
+                      name="fullName"
+                      value={formData.fullName}
+                      onChange={handleChange}
+                    />
+                    {errors.fullName && (
+                      <div className="error-message">{errors.fullName}</div>
+                    )}
+                  </div>
+                  
+                  <div className="form-group">
+                    <input
+                      type="email"
+                      className={`form-control ${errors.email ? 'error' : ''}`}
+                      placeholder="Email Address"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                    />
+                    {errors.email && (
+                      <div className="error-message">{errors.email}</div>
+                    )}
+                  </div>
+                  
+                  <div className="form-group">
+                    <input
+                      type="tel"
+                      className={`form-control ${errors.phone ? 'error' : ''}`}
+                      placeholder="Phone Number"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                    />
+                    {errors.phone && (
+                      <div className="error-message">{errors.phone}</div>
+                    )}
+                  </div>
+
+                  <div className="form-check">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="whatsapp"
+                      name="whatsapp"
+                      checked={formData.whatsapp}
+                      onChange={handleChange}
+                    />
+                    <label className="form-check-label" htmlFor="whatsapp">
+                      I agree to Terms &amp; Get updates on WhatsApp
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="submit-btn"
+                  >
+                    Plan My Holidays
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default ContactForm;

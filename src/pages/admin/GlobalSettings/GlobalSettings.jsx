@@ -1,335 +1,290 @@
-import React, { useEffect, useState } from 'react'
-import { BACKEND_DOMAIN } from '../../../common/api/ApiClient';
-import { GetSpecificAppConfig, SingleFileUpload, UpdateAppConfig, UpdateAppConfigSocialLinks } from '../../../common/api/ApiService';
-import { errorMsg, successMsg } from '../../../common/Toastify';
-import { normalizeEmptyFields } from '../../../common/Validation';
+import React, { useState } from "react";
+import { Info, DollarSign, FileText, Shield, List, Mail } from "lucide-react";
 
-const GlobalSettings = () => {
-    const [appConfigData, setApppConfigData] = useState({})
-    const getAppConfig = async () => {
-        const response = await GetSpecificAppConfig()
-        if (response && response?.statusCode === 200) {
-            setApppConfigData(response?.data)
-        }
-    }
+export default function GlobalSettings() {
+  const [activeStep, setActiveStep] = useState("general");
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        const keys = name.split(".");
+  const steps = [
+    { id: "general", label: "GENERAL", icon: Info },
+    { id: "payment", label: "PAYMENT DETAILS", icon: DollarSign },
+    { id: "menu", label: "MENU", icon: List },
+    { id: "seo", label: "SEO", icon: FileText },
+    { id: "emails", label: "EMAIL TEMPLATES", icon: Mail },
+    { id: "policies", label: "POLICIES", icon: Shield },
+  ];
 
-        setApppConfigData((prev) => {
-            const updated = { ...prev };
-            let temp = updated;
+  const currentIndex = steps.findIndex((s) => s.id === activeStep);
+  const progress = ((currentIndex + 1) / steps.length) * 100 + "%";
 
-            for (let i = 0; i < keys.length - 1; i++) {
-                if (!temp[keys[i]]) temp[keys[i]] = {};
-                temp = temp[keys[i]];
-            }
+  const renderStepContent = () => {
+    switch (activeStep) {
+      case "general":
+        return (
+          <div className="form-container">
+            <h3>General Settings</h3>
 
-            temp[keys[keys.length - 1]] = value;
-
-            return updated;
-        });
-    };
-
-
-    const handleFileUpload = async (e, key) => {
-        const file = e.target.files[0];
-
-        if (!file) return;
-        let image_name = e?.target?.files[0]?.name;
-        let image_type = image_name?.split(".");
-        let type = image_type?.pop();
-        if (type !== "jpeg" && type !== "png" && type !== "jpg" && type !== "pdf" && type !== "webp") {
-            errorMsg("Unsupported file type")
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("storage", "local");
-        const response = await SingleFileUpload(formData);
-
-        if (response?.statusCode !== 200) {
-            errorMsg("Failed to upload file")
-            return;
-        }
-
-        const path = response?.path;
-        successMsg("File upload successfully")
-
-        setApppConfigData({ ...appConfigData, [key]: path })
-    };
-
-    const handleUpdate = async (e) => {
-        const { __v, createdAt, updatedAt, ...removedObject } = appConfigData;
-        e.preventDefault()
-        const cleanedData = normalizeEmptyFields(removedObject);
-        // if (Object.values(isValide).every((data) => data?.status === true)) {
-        const response = await UpdateAppConfig(cleanedData)
-        if (response && response?.statusCode === 200) {
-            successMsg("App Configuration Updated Successsfully")
-            getAppConfig()
-        }
-        // }
-
-    }
-
-
-    const handleToggleShow = async (platform) => {
-        const url = appConfigData?.social_links?.[platform]?.url;
-        const currentShow = appConfigData?.social_links?.[platform]?.show;
-
-        const payload = {
-            social_links: {
-                [platform]: {
-                    url,
-                    show: !currentShow,
-                }
-            }
-        };
-
-        const response = await UpdateAppConfigSocialLinks(payload);
-        if (response?.statusCode === 200) {
-            successMsg("Visibility toggled successfully");
-            getAppConfig();
-        } else {
-            errorMsg("Failed to toggle visibility");
-        }
-    };
-
-    useEffect(() => {
-        getAppConfig()
-    }, [])
-
-
-    console.log(appConfigData, "appConfigData")
-    return (
-        <div className='admin-content-main min-vh-100'>
-
-            <div className='global-tabs-parent'>
-                <div className='global-tabs-main'>
-                    <button className='active'>
-                        Global Settings
-                    </button>
-                </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>Site Title</label>
+                <input type="text" placeholder="Enter site title" />
+              </div>
+              <div className="form-group">
+                <label>Tagline</label>
+                <input type="text" placeholder="Enter tagline" />
+              </div>
+              <div className="form-group">
+                <label>Company Name</label>
+                <input type="text" placeholder="Company Name" />
+              </div>
+              <div className="form-group">
+                <label>Site Description</label>
+                <textarea rows="3"></textarea>
+              </div>
+              <div className="form-group">
+                <label>Logo</label>
+                <input type="file" />
+              </div>
+              <div className="form-group">
+                <label>Fav Icon</label>
+                <input type="file" />
+              </div>
+              <div className="form-group">
+                <label>Homepage Slider (Image/Video)</label>
+                <input type="file" multiple />
+              </div>
             </div>
 
-            <div className='mt-5 mb-5'>
-                <div className='row'>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div mt-4'>
-                            <label>Company Name</label>
-                            <input type="text" value={appConfigData?.company_name || ""}
-                                name='company_name'
-                                placeholder="Enter Compnay Name"
-                                onChange={(e) => handleChange(e)}
-                            />
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div'>
-                            <label>Phone Number 1 </label>
-                            <input type="text" value={appConfigData?.phone1 || ""}
-                                name='phone1'
-                                placeholder="Enter Phone Number"
-                                onChange={(e) => handleChange(e)}
-                            />
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div'>
-                            <label>Phone Number 2 </label>
-                            <input type="text" value={appConfigData?.phone2 || ""}
-                                name='phone2'
-                                placeholder="Enter Phone Number"
-                                onChange={(e) => handleChange(e)}
-                            />
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div mt-4'>
-                            <label>Email Addres</label>
-                            <input type="text" value={appConfigData?.email || ""}
-                                name='email'
-                                placeholder="Enter Email Address"
-                                onChange={(e) => handleChange(e)}
-                            />
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div mt-4'>
-                            <label>Company Address</label>
-                            <textarea type="text" value={appConfigData?.address || ""}
-                                name='address'
-                                placeholder="Enter Company Address"
-                                onChange={(e) => handleChange(e)}
-                            />
-                        </div>
-                    </div>
-
-                    <div className='col-lg-6'>
-                        <div className='model-input-div'>
-                            <label>Logo Image</label>
-                            <input
-                                type="file"
-                                name='activity_image'
-                                accept='.png,.jpeg,.jpg,.pdf,.webp'
-                                className="form-control"
-                                onChange={(e) => { handleFileUpload(e, "logo_url"); handleChange(e) }}
-                            />
-                            {appConfigData?.logo_url && (
-                                <div className='upload-image-div logo-global-settings'>
-                                    <img src={`${BACKEND_DOMAIN}${appConfigData?.logo_url}`} alt="Category-Preview" />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                </div>
-                <p className='header-title'>Social Media Links</p>
-                <div className='row'>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div'>
-                            <label>Facebook Link</label>
-                            <div className='d-flex app-config mt-2'>
-                                <i className="fa-brands fa-facebook-f"></i>
-                                <input type="text"
-                                    value={appConfigData?.social_links?.facebook?.url || ""}
-                                    name="social_links.facebook.url"
-                                    onChange={(e) => {
-                                        handleChange(e);
-                                    }} />
-                            </div>
-                        </div>
-                        <div className='mt-4'>
-                            <label className='show-website fw-bold'>Show In Website</label>
-                            <div className="switch" onClick={() => handleToggleShow('facebook')}>
-                                <input type="checkbox"
-                                    checked={appConfigData?.social_links?.facebook?.show}
-                                />
-                                <span className="slider-table round"></span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div'>
-                            <label>Instagram Link</label>
-                            <div className='d-flex app-config mt-2'>
-                                <i className="fa-brands fa-instagram"></i>
-                                <input type="text" value={appConfigData?.social_links?.instagram?.url || ""}
-                                    name="social_links.instagram.url"
-                                    placeholder="Enter Instgaram Link"
-                                    onChange={(e) => handleChange(e)} />
-                            </div>
-                        </div>
-                        <div className='mt-4'>
-                            <label className='show-website fw-bold'>Show In Website</label>
-                            <div className="switch" onClick={() => handleToggleShow('instagram')}>
-                                <input type="checkbox" checked={appConfigData?.social_links?.instagram?.show} />
-                                <span className="slider-table round"></span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div mt-5'>
-                            <label>Linkedin Link</label>
-                            <div className='d-flex app-config mt-2'>
-                                <i className="fa-brands fa-linkedin-in"></i>
-                                <input type="text" value={appConfigData?.social_links?.linkedin?.url || ""}
-                                    name="social_links.linkedin.url"
-                                    placeholder="Enter Linkedin Link"
-                                    onChange={(e) => handleChange(e)} />
-                            </div>
-                        </div>
-                        <div className='mt-4'>
-                            <label className='show-website fw-bold'>Show In Website</label>
-                            <div className="switch" onClick={() => handleToggleShow('linkedin')}>
-                                <input type="checkbox" checked={appConfigData?.social_links?.linkedin?.show} />
-                                <span className="slider-table round"></span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div mt-5'>
-                            <label>You Tube Link</label>
-                            <div className='d-flex app-config mt-2'>
-                                <i class="fa-brands fa-youtube"></i>
-                                <input type="text" value={appConfigData?.social_links?.youtube?.url || ""}
-                                    placeholder="Enter You Tube Link"
-                                    name="social_links.youtube.url"
-                                    onChange={(e) => handleChange(e)} />
-                            </div>
-                            <div className='mt-4'>
-                                <label className='show-website fw-bold'>Show In Website</label>
-                                <div className="switch" onClick={() => handleToggleShow('youtube')}>
-                                    <input type="checkbox" checked={appConfigData?.social_links?.youtube?.show} />
-                                    <span className="slider-table round"></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div mt-5'>
-                            <label>X Link</label>
-                            <div className='d-flex app-config mt-2'>
-                                <i className="fa-brands fa-x-twitter"></i>
-                                <input type="text" value={appConfigData?.social_links?.twitter?.url || ""}
-                                    placeholder="Enter X Link"
-                                    name="social_links.twitter.url"
-                                    onChange={(e) => handleChange(e)} />
-                            </div>
-                        </div>
-                        <div className='mt-4'>
-                            <label className='show-website fw-bold'>Show In Website</label>
-                            <div className="switch" onClick={() => handleToggleShow('twitter')}>
-                                <input type="checkbox" checked={appConfigData?.social_links?.twitter?.show} />
-                                <span className="slider-table round"></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <p className='header-title mt-5'>Scripts</p>
-                <div className='row'>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div'>
-                            <label>Google Analytics </label>
-                            <textarea type="text" value={appConfigData?.google_analytics || ""}
-                                name='google_analytics'
-                                placeholder="Enter Google Analytics here"
-                                onChange={(e) => handleChange(e)}
-                            />
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div mt-4'>
-                            <label>Google Search Console</label>
-                            <textarea type="text" value={appConfigData?.google_search_console || ""}
-                                name='google_search_console'
-                                placeholder="Enter Google Search Console script here"
-                                onChange={(e) => handleChange(e)}
-                            />
-                        </div>
-                    </div>
-                    <div className='col-lg-6'>
-                        <div className='model-input-div mt-4'>
-                            <label>Meta Pixel script</label>
-                            <textarea type="text" value={appConfigData?.meta_pixel || ""}
-                                name='meta_pixel'
-                                placeholder="Enter Meta Pixel script here"
-                                onChange={(e) => handleChange(e)}
-                            />
-                        </div>
-                    </div>
-                </div>
-
+            <h4>Contact Information</h4>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>Contact Email</label>
+                <input type="email" placeholder="Enter email" />
+              </div>
+              <div className="form-group">
+                <label>Phone Number</label>
+                <input type="text" placeholder="Enter phone" />
+                <button className="btn-small">+ Add More</button>
+              </div>
+              <div className="form-group">
+                <label>Business Address</label>
+                <textarea rows="2"></textarea>
+              </div>
+              <div className="form-group">
+                <label>Social Media Links</label>
+                <input type="url" placeholder="https://..." />
+              </div>
+              <div className="form-group">
+                <label>Google Map Link</label>
+                <input type="url" placeholder="Google Maps URL" />
+              </div>
             </div>
+          </div>
+        );
 
-            <button className='create-common-btn' type='submit' onClick={(e) => handleUpdate(e)}>Update App Configuration</button>
+      case "payment":
+        return (
+          <div className="form-container">
+            <h3>Payment Details</h3>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>Bank Name</label>
+                <input type="text" />
+              </div>
+              <div className="form-group">
+                <label>Account No.</label>
+                <input type="text" />
+              </div>
+              <div className="form-group">
+                <label>IFSC Code</label>
+                <input type="text" />
+              </div>
+              <div className="form-group">
+                <label>Branch Name</label>
+                <input type="text" />
+              </div>
+              <div className="form-group">
+                <label>UPI IDs</label>
+                <input type="text" />
+              </div>
+              <div className="form-group">
+                <label>Upload QR Code</label>
+                <input type="file" />
+              </div>
+            </div>
+            <h4>Quotation & Invoice Format</h4>
+            <textarea rows="4" placeholder="Enter format details"></textarea>
+          </div>
+        );
 
+      case "menu":
+        return (
+          <div className="form-container">
+            <h3>Menu Settings</h3>
+            <div className="form-group">
+              <label>Menu Name</label>
+              <input type="text" placeholder="Main Menu" />
+            </div>
+            <div className="form-group">
+              <label>Add Pages/Posts/Links</label>
+              <input type="text" placeholder="Custom Link Name" />
+              <input type="url" placeholder="Custom Link URL" />
+              <button className="btn-small">+ Add Item</button>
+            </div>
+            <div className="form-group">
+              <label>Categories</label>
+              <select>
+                <option>Select category</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Menu Position</label>
+              <select>
+                <option>Header Menu</option>
+                <option>Footer Menu</option>
+              </select>
+            </div>
+            <p className="note">
+              ⚡ Drag & drop support for rearranging can be added
+            </p>
+          </div>
+        );
+
+      case "seo":
+        return (
+          <div className="form-container">
+            <h3>SEO Settings</h3>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>Meta Title</label>
+                <input type="text" />
+              </div>
+              <div className="form-group">
+                <label>Meta Description</label>
+                <textarea rows="2"></textarea>
+              </div>
+              <div className="form-group">
+                <label>Meta Tags</label>
+                <input type="text" placeholder="tag1, tag2" />
+              </div>
+            </div>
+            <h4>Open Graph Tags</h4>
+            <div className="grid-2">
+              <input type="text" placeholder="OG Title" />
+              <input type="text" placeholder="OG Description" />
+              <input type="file" />
+            </div>
+            <h4>Analytics & Tracking</h4>
+            <div className="form-group">
+              <label>Custom Script</label>
+              <textarea rows="3" placeholder="<script>...</script>"></textarea>
+            </div>
+            <div className="form-group">
+              <label>Display Location</label>
+              <select>
+                <option>Header</option>
+                <option>Footer</option>
+                <option>Body</option>
+                <option>Thank You Page</option>
+              </select>
+            </div>
+          </div>
+        );
+
+      case "emails":
+        return (
+          <div className="form-container">
+            <h3>Email Templates</h3>
+            <h4>Incoming</h4>
+            <div className="form-group">
+              <label>Contact Form Submitted</label>
+              <textarea rows="2"></textarea>
+            </div>
+            <h4>Outgoing</h4>
+            {[
+              "Form Submitted",
+              "Quotation Sent",
+              "Invoice Sent",
+              "Lead Assigned",
+              "Payment Confirmation",
+              "Invoice Due Date",
+              "Trip Updates",
+              "Follow Up",
+            ].map((item) => (
+              <div className="form-group" key={item}>
+                <label>{item}</label>
+                <textarea rows="2"></textarea>
+              </div>
+            ))}
+          </div>
+        );
+
+      case "policies":
+        return (
+          <div className="form-container">
+            <h3>Policies</h3>
+            <div className="form-group">
+              <label>Terms & Conditions</label>
+              <textarea rows="3"></textarea>
+            </div>
+            <div className="form-group">
+              <label>Privacy Policy</label>
+              <textarea rows="3"></textarea>
+            </div>
+            <div className="form-group">
+              <label>Payment Policy</label>
+              <textarea rows="3"></textarea>
+            </div>
+          </div>
+        );
+
+      default:
+        return <p>Step Not Found</p>;
+    }
+  };
+
+  return (
+    <div className="settings-container">
+      <div className="settings-header">
+        <h2>Global Settings</h2>
+      </div>
+
+      <div className="progress-bar">
+        <div className="progress-bar-fill" style={{ width: progress }}></div>
+      </div>
+
+      {/* Stepper */}
+      <div className="stepper">
+        {steps.map((step, index) => {
+          const Icon = step.icon;
+          const active = index <= currentIndex;
+          return (
+            <button
+              key={step.id}
+              onClick={() => setActiveStep(step.id)}
+              className="step-button"
+            >
+              <div className={`step-circle ${active ? "active" : ""}`}>
+                <Icon size={18} />
+              </div>
+              <span className={active ? "active" : ""}>{step.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {renderStepContent()}
+
+      {/* Footer */}
+      <div className="footer-actions">
+        <span>
+          {currentIndex + 1}/{steps.length} sections complete
+        </span>
+        <div>
+          <button className="btn">Save Draft</button>
+          <button className="btn">Preview</button>
+          <button className="btn primary">Publish</button>
         </div>
-    )
+      </div>
+    </div>
+  );
 }
-
-export default GlobalSettings

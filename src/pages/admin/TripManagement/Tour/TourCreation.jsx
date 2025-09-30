@@ -1,2569 +1,1665 @@
-import JoditEditor from 'jodit-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom';
-import Select from 'react-select';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import { NonEmptyArrayValidation, NonEmptyValidation, normalizeEmptyFields, NumberValidation, SlugValidation, StringValidation } from '../../../../common/Validation';
-import { CreateTripPackage, GetAllActivity, GetAllDestination, GetAllTourCategory, MultipleFileUpload, SingleFileUpload } from '../../../../common/api/ApiService';
-import CreatableSelect from 'react-select/creatable';
-import { BACKEND_DOMAIN } from '../../../../common/api/ApiClient';
-import { errorMsg, successMsg } from '../../../../common/Toastify';
-
-const TourCreation = () => {
-  const navigate = useNavigate();
-
-  const [activeTab, setActiveTab] = useState(1);
-  const [activeTripTab, setActiveTripTab] = useState(1);
-  const [activePricingTab, setActivePricingTab] = useState(1);
-
-  const [destinationList, setDestinationList] = useState([])
-  const [categoryList, setcategoryList] = useState([])
-
-
-  const sectionTabs = [
-    {
-      id: 1,
-      name: 'Trip Type',
-      detail: {
-        head: "Select Trip Type",
-        para: "Choose the type of trip package you want to create. This will determine the available fields and options."
-      }
-    },
-    {
-      id: 2,
-      name: 'Basic Info',
-      detail: {
-        head: "Basic Trip Informatione",
-        para: "Provide basic details about the trip."
-      }
-    },
-    {
-      id: 3,
-      name: 'Details',
-      detail: {
-        head: "Trip Details",
-        para: "Provide detailed information about the trip"
-      }
-    },
-    {
-      id: 4,
-      name: 'Pricing',
-      detail: {
-        head: "Pricing & Inclusions",
-        para: "Set pricing and inclusion details for the trip."
-      }
-    },
-    {
-      id: 5,
-      name: 'SEO',
-      detail: {
-        head: "SEO & Advanced Options",
-        para: "Optimize your trip for search engines and provide advanced options."
-      }
-    },
-
-  ]
-
-  const TripTypeCard = [
-    {
-      id: 1,
-      head: 'Customized Package',
-      para: 'Tailor-made trips for individual customers'
-    },
-    {
-      id: 2,
-      head: 'Fixed Departure',
-      para: 'Scheduled group trips with fixed dates'
-    },
-
-  ]
-
-  const PricingTab = [
-    {
-      id: 1,
-      head: 'Price Per Person',
-      para: 'Individual pricing model'
-    },
-    {
-      id: 2,
-      head: 'Price Per Package',
-      para: 'Package-based pricing'
-    },
-  ]
-
-  const getAllDestination = async () => {
-    const response = await GetAllDestination()
-    if (response && response?.statusCode === 200) {
-      setDestinationList(response?.data)
-    }
-  }
-
-  const getAllTourCategory = async () => {
-    const response = await GetAllTourCategory()
-    if (response && response?.statusCode === 200) {
-      setcategoryList(response?.data);
-    }
-  }
-
-
-  // Itinerarys based
-
-  const [itinerarys, setItinerary] = useState([{ day_title: "", day_description: "", day_images: [], day_activiy: [] }]);
-
-  const addItinerary = () => {
-    setItinerary([...itinerarys, { day_title: "", day_description: "", day_images: [], day_activiy: [] }]);
-  };
-
-  const deleteItinerary = (indexToRemove) => {
-    if (indexToRemove !== 0) {
-      const updatedItinerary = itinerarys.filter((_, index) => index !== indexToRemove);
-      setItinerary(updatedItinerary);
-    }
-  };
-
-  const updateItinerary = (index, key, value) => {
-    const updatedItinerary = [...itinerarys];
-    updatedItinerary[index][key] = value;
-    setItinerary(updatedItinerary);
-  };
-
-  const handleBlurCustomizedItinerary = (index) => {
-    const current = itinerarys[index];
-    const title = current.day_title?.trim();
-    const desc = current.day_description?.trim();
-
-    let message = "";
-
-    if ((title && !desc) || (!title && desc)) {
-      message = `Both title and description are required if either is filled for Day ${index + 1}.`;
-    }
-
-    const isValid = message === "";
-
-    setValidation(prev => ({
-      ...prev,
-      [`itinerarys_${index}_day_title`]: {
-        status: isValid,
-        message,
-      },
-      [`itinerarys_${index}_day_description`]: {
-        status: isValid,
-        message,
-      },
-    }));
-  };
-
-
-
-  // File Uploads
-
-  const handleFileUpload = async (e, key, tripType) => {
-    const file = e.target.files[0];
-
-    if (!file) return;
-    let image_name = e?.target?.files[0]?.name;
-    let image_type = image_name?.split(".");
-    let type = image_type?.pop();
-    if (type !== "jpeg" && type !== "png" && type !== "jpg" && type !== "pdf" && type !== "webp") {
-      errorMsg
-        ("Unsupported file type")
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("storage", "local");
-    const response = await SingleFileUpload(formData);
-
-    if (response?.statusCode !== 200) {
-      errorMsg("Failed to upload file")
-      return;
-    }
-    const path = response?.path;
-
-    if (tripType === "customized") {
-      setCustomizedPackageData({ ...customizedPackageData, [key]: path })
-    }
-    if (tripType === "fixed_departure") {
-      setFixedPackageData({ ...fixedPackageData, [key]: path })
-    }
-    if (validation[key]) {
-      setValidation({ ...validation, [key]: false })
-    }
-    successMsg("File upload successfully")
-  };
-
-  const handleMultipleFileUpload = async (e, key, index, trip_type) => {
-    const file = e.target.files[0];
-
-    if (!file) return;
-    let image_name = e?.target?.files[0]?.name;
-    let image_type = image_name?.split(".");
-    let type = image_type?.pop();
-    if (type !== "jpeg" && type !== "png" && type !== "jpg" && type !== "pdf" && type !== "webp") {
-      errorMsg
-        ("Unsupported file type")
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("files", file);
-    formData.append("storage", "local");
-    const response = await MultipleFileUpload(formData);
-
-    if (response?.statusCode !== 200) {
-      errorMsg("Failed to upload Image")
-      return;
-    }
-
-    const path = response?.path;
-
-    if (key === "hero_slider_images") {
-      const existingImages = trip_type === "fixed_departure" ? fixedPackageData?.hero_slider_images || [] : customizedPackageData?.hero_slider_images || [];
-
-      const newPaths = Array.isArray(path)
-        ? path.flat()
-        : [path];
-
-      const updatedImages = [...existingImages, ...newPaths];
-
-
-      if (trip_type === "fixed_departure") {
-        setFixedPackageData({
-          ...fixedPackageData,
-          hero_slider_images: updatedImages,
-        });
-      }
-      else {
-        setCustomizedPackageData({
-          ...customizedPackageData,
-          hero_slider_images: updatedImages,
-        });
-      }
-      if (validation?.hero_slider_images?.status === false) {
-        setValidation((prev) => ({
-          ...prev,
-          hero_slider_images: { status: true, message: "" },
-        }));
-      }
-
-    }
-
-    if (key === "gallery_images") {
-      const existingImages = trip_type === "fixed_departure" ? fixedPackageData?.gallery_images || [] : customizedPackageData?.gallery_images || [];
-
-      const newPaths = Array.isArray(path)
-        ? path.flat()
-        : [path];
-
-      const updatedImages = [...existingImages, ...newPaths];
-
-
-      if (trip_type === "fixed_departure") {
-        setFixedPackageData({
-          ...fixedPackageData,
-          gallery_images: updatedImages,
-        });
-      }
-      else {
-        setCustomizedPackageData({
-          ...customizedPackageData,
-          gallery_images: updatedImages,
-        });
-      }
-
-      if (validation?.gallery_images?.status === false) {
-        setValidation((prev) => ({
-          ...prev,
-          gallery_images: { status: true, message: "" },
-        }));
-      }
-    }
-
-    if (key === "day_images") {
-      const existingDayImages = itinerarys[index].day_images || [];
-
-      const newPaths = Array.isArray(path) ? path.flat() : [path];
-
-      const updatedDayImages = [...existingDayImages, ...newPaths];
-
-      const updatedItinerary = [...itinerarys];
-      updatedItinerary[index].day_images = updatedDayImages;
-      setItinerary(updatedItinerary);
-    }
-
-    successMsg("Image uploaded successfully");
-
-
-  };
-
-  // customized package
-
-  const [customizedPackageData, setCustomizedPackageData] = useState({});
-  const [validation, setValidation] = useState({})
-
-  const handleBlurCustomized = (fieldName, value) => {
-    const updatedData = {
-      ...customizedPackageData,
-      [fieldName]: value,
-    };
-
-    const cleanedData = normalizeEmptyFields(updatedData);
-    const fieldValidation = validateDetails(cleanedData);
-
-    setValidation((prev) => ({
-      ...prev,
-      [fieldName]: fieldValidation[fieldName],
-    }));
-  };
-
-  const handleCustomizedPackageChange = (e) => {
-    const { name, value } = e.target
-    setCustomizedPackageData({ ...customizedPackageData, [name]: value })
-    if (validation[name]) {
-      setValidation({ ...validation, [name]: false })
-    }
-  }
-
-  const validateDetails = (data) => {
-    let validate = {};
-
-    validate.trip_title = NonEmptyValidation(data?.trip_title);
-    validate.trip_category = NonEmptyValidation(data?.trip_category);
-    validate.destination = NonEmptyValidation(data?.destination);
-    validate.slug = SlugValidation(data?.slug);
-    validate.days = NumberValidation(data?.days);
-    validate.nights = NumberValidation(data?.nights);
-    validate.short_description = NonEmptyValidation(data?.short_description);
-    validate.pickup_location = StringValidation(data?.pickup_location);
-    validate.drop_location = StringValidation(data?.drop_location);
-    validate.long_description = NonEmptyValidation(data?.long_description);
-    validate.primary_trip_image = NonEmptyValidation(data?.primary_trip_image);
-    validate.hero_slider_images = NonEmptyArrayValidation(data?.hero_slider_images);
-
-
-    validate.meta_title = NonEmptyValidation(data?.meta_title);
-    validate.meta_description = NonEmptyValidation(data?.meta_description);
-    validate.meta_tags = NonEmptyValidation(data?.meta_tags);
-    validate.gallery_images = NonEmptyArrayValidation(data?.gallery_images);
-
-    return validate;
-  };
-
-
-  // Fixed Departure package
-  const [fixedPackageData, setFixedPackageData] = useState({});
-  const handleFixedPackageChange = (e) => {
-    const { name, value } = e.target
-    setFixedPackageData({ ...fixedPackageData, [name]: value })
-    if (validation[name]) {
-      setValidation({ ...validation, [name]: false })
-    }
-  }
-
-
-  //Fixed Departure Departure Slot Arrays
-
-  const [departureSlots, setDepartureSlots] = useState([{
-    start_date: "",
-    end_date: "",
-    total_slots: "",
-    available_slots: "",
-    special_price: "",
-    status: ""
-  }]);
-  const [departureSlotsValidation, setDepartureSlotsValidation] = useState({});
-
-  const addDepartureSlots = () => {
-    setDepartureSlots([
-      ...departureSlots,
+import { useEffect, useState } from "react";
+import {
+  Info,
+  Map,
+  Image,
+  DollarSign,
+  FileText,
+  Shield,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import "./TourCreation.css";
+import { useDispatch, useSelector } from "react-redux";
+import { getSpecificDestination } from "../../../../store/slices/destinationSlices";
+import { createTrip } from "../../../../store/slices/tripSlices";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+export default function TourCreation() {
+  const [activeStep, setActiveStep] = useState("basic");
+  const [openDay, setOpenDay] = useState(null);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    // Basic Info
+    title: "",
+    overview: "",
+    destination_id: "",
+    destination_type: "",
+    categories: [],
+    themes: [],
+    hotel_category: "",
+    pickup_location: "",
+    drop_location: "",
+    days: "",
+    nights: "",
+
+    // Itinerary
+    itineraryDays: [
       {
-        start_date: null,
-        end_date: null,
-        total_slots: "",
-        available_slots: "",
-        special_price: "",
-        status: ""
-      }
-    ]);
-  };
+        id: 1,
+        day_number: 1,
+        title: "Day 1: Arrival",
+        description: "",
+        activities: [],
+        hotel_name: "",
+        meal_plan: [],
+      },
+    ],
 
-  const deleteDepartureSlots = (indexToRemove) => {
-    if (indexToRemove !== 0) {
-      const updatedItinerary = departureSlots.filter((_, index) => index !== indexToRemove);
-      setDepartureSlots(updatedItinerary);
-    }
-  };
+    // Media - Updated to store file objects and preview URLs
+    hero_image: null,
+    hero_image_preview: null,
+    gallery_images: [],
+    gallery_previews: [],
 
-  const updateDepartureSlots = (index, key, value) => {
-    const updatedSlots = [...departureSlots];
-    updatedSlots[index][key] = value;
-    setDepartureSlots(updatedSlots);
-  };
+    // Pricing
+    pricing_model: "",
+    pricing_data: {
+      fixed_departure: [
+        {
+          from_date: "",
+          to_date: "",
+          available_slots: "",
+          title: "",
+          description: "",
+          base_price: "",
+          discount: "",
+          final_price: "",
+          booking_amount: "",
+          gst_percentage: "",
+        },
+      ],
+      customized: {
+        pricing_type: "",
+        base_price: "",
+        discount: "",
+        final_price: "",
+      },
+    },
 
-  const handleBlurDepartureSlots = (fieldName, value, index) => {
-    const isValid = value !== "" && value !== null;
-    const message = isValid ? "" : `is required`;
+    // Details
+    highlights: [],
+    inclusions: [],
+    exclusions: [],
+    faqs: [],
 
-    setDepartureSlotsValidation((prev) => ({
-      ...prev,
-      [index]: {
-        ...prev[index],
-        [fieldName]: {
-          status: isValid,
-          message,
-        }
-      }
-    }));
-  };
+    // Policies
+    terms: "",
+    privacy_policy: "",
+    payment_terms: "",
+    custom_policies: [],
+  });
 
-  const [fixedPricePerPerson, setFixedPricePerPerson] = useState({})
-  const [fixedPricePerPersonValidation, setFixedPricePerPersonValidation] = useState({})
+  const [selectedPricing, setSelectedPricing] = useState("");
+  const [highlightsInput, setHighlightsInput] = useState("");
+  const [inclusionsInput, setInclusionsInput] = useState("");
+  const [exclusionsInput, setExclusionsInput] = useState("");
+  const [faqInput, setFaqInput] = useState("");
+  const [customPolicyInput, setCustomPolicyInput] = useState("");
 
-  const handleFixedPricePerPersonChange = (key, value) => {
-    setFixedPricePerPerson({ ...fixedPricePerPerson, [key]: value })
-    if (fixedPricePerPersonValidation[key]) {
-      setFixedPricePerPersonValidation({ ...fixedPricePerPersonValidation, [key]: false })
-    }
-  }
+  const steps = [
+    { id: "basic", label: "Basic Info", icon: Info },
+    { id: "itinerary", label: "Itinerary", icon: Map },
+    { id: "media", label: "Media", icon: Image },
+    { id: "pricing", label: "Pricing", icon: DollarSign },
+    { id: "details", label: "Details", icon: FileText },
+    { id: "policies", label: "Policies", icon: Shield },
+  ];
 
-  const handleFixedPricePerPersonBlur = (fieldName, value) => {
-    const updatedData = {
-      ...fixedPricePerPerson,
-      [fieldName]: value,
-    };
+  const indianCities = [
+    "Mumbai",
+    "Delhi",
+    "Bangalore",
+    "Hyderabad",
+    "Ahmedabad",
+    "Chennai",
+    "Kolkata",
+    "Surat",
+    "Pune",
+    "Jaipur",
+    "Lucknow",
+    "Kanpur",
+    "Nagpur",
+    "Indore",
+    "Thane",
+    "Bhopal",
+    "Visakhapatnam",
+    "Pimpri-Chinchwad",
+    "Patna",
+    "Vadodara",
+    "Ghaziabad",
+    "Ludhiana",
+    "Agra",
+    "Nashik",
+    "Faridabad",
+    "Meerut",
+    "Rajkot",
+    "Kalyan-Dombivli",
+    "Vasai-Virar",
+    "Varanasi",
+    "Srinagar",
+    "Aurangabad",
+    "Dhanbad",
+    "Amritsar",
+    "Navi Mumbai",
+    "Allahabad",
+    "Howrah",
+    "Gwalior",
+    "Jabalpur",
+    "Coimbatore",
+    "Vijayawada",
+    "Jodhpur",
+    "Madurai",
+    "Raipur",
+    "Kota",
+    "Chandigarh",
+    "Guwahati",
+    "Solapur",
+    "Hubli-Dharwad",
+    "Mysore",
+  ];
 
-    const cleanedData = normalizeEmptyFields(updatedData);
-    const fieldValidation = FixedPricePerPackageValidation(cleanedData);
-
-    setFixedPricePerPersonValidation((prev) => ({
-      ...prev,
-      [fieldName]: fieldValidation[fieldName],
-    }));
-  };
-
-
-  const FixedPricePerPackageValidation = (data) => {
-    let validate = {};
-
-    validate.base_price = NumberValidation(data?.base_price);
-    validate.currency = NonEmptyValidation(data?.currency);
-    // validate.start_from = NonEmptyValidation(data?.start_from);
-    validate.double_occupancy = NonEmptyValidation(data?.double_occupancy);
-    validate.quad_occupancy = NonEmptyValidation(data?.quad_occupancy);
-    validate.triple_occupancy = NonEmptyValidation(data?.triple_occupancy);
-    validate.inclusion = NonEmptyValidation(data?.inclusion);
-    validate.exclusion = NonEmptyValidation(data?.exclusion);
-    validate.key_highlights = NonEmptyValidation(data?.key_highlights);
-    validate.cancellation_policy = NonEmptyValidation(data?.cancellation_policy);
-
-    return validate;
-  }
-
-  const editor = useRef(null);
-
-  const [activityList, setActivityList] = useState([])
-  const [selectedActivities, setSelectedActivities] = useState([]);
-  const getAllActivity = async () => {
-    const response = await GetAllActivity()
-    if (response && response?.statusCode === 200) {
-      setActivityList(response?.data)
-    }
-  }
-
-  const activityOptions = activityList.map(item => ({
-    label: item.activity_name,
-    value: item._id
-  }));
+  const dispatch = useDispatch();
+  const { data, loading, error } = useSelector((state) => state.destination);
 
   useEffect(() => {
-    getAllDestination()
-    getAllTourCategory()
-    getAllActivity()
-  }, [])
+    dispatch(getSpecificDestination());
+  }, [dispatch]);
 
+  const currentIndex = steps.findIndex((s) => s.id === activeStep);
+  const progress = ((currentIndex + 1) / steps.length) * 100 + "%";
 
-  // PricingDetail Based Arrays
-
-  const [pricingDetail, setPricingDetail] = useState([{ start_date: "", end_date: "", season_price: "", season_name: "", }]);
-
-  const addPricingDetail = (dataValue) => {
-    if (dataValue === "pricingPerPerson") {
-      setPricingDetail([...pricingDetail, { start_date: "", end_date: "", season_price: "", season_name: "", }]);
-    }
-  };
-
-  const deletePricingDetail = (indexToRemove, dataValue) => {
-    if (dataValue === "pricingPerPerson") {
-      if (indexToRemove !== 0) {
-        const updatedItinerary = pricingDetail.filter((_, index) => index !== indexToRemove);
-        setPricingDetail(updatedItinerary);
-      }
-    }
-  };
-
-  const updatePricingDetail = (index, key, value, dataValue) => {
-    if (dataValue === "pricingPerPerson") {
-      const updatedItinerary = [...pricingDetail];
-      updatedItinerary[index][key] = value;
-      setPricingDetail(updatedItinerary);
-    }
-  };
-
-  // PricePerPerson based
-
-  const [customPricePerPerson, setCustomPricePerPerson] = useState({})
-  const [pricingValidation, setPricingValidation] = useState({})
-
-
-  const handleBlurPricingDetails = (index) => {
-    const current = pricingDetail[index];
-
-    const start_date = current.start_date ? String(current.start_date).trim() : '';
-    const end_date = current.end_date ? String(current.end_date).trim() : '';
-    const season_price = current.season_price ? String(current.season_price).trim() : '';
-    const season_name = current.season_name ? String(current.season_name).trim() : '';
-
-    const anyFilled = start_date || end_date || season_price || season_name;
-    const allFilled = start_date && end_date && season_price && season_name;
-    const isValid = !anyFilled || allFilled;
-
-    const message = isValid
-      ? ""
-      : `All fields are required if any one is filled in Season ${index + 1}.`;
-
-    const status = Boolean(isValid);
-
-    setPricingValidation((prev) => ({
+  // Handler functions
+  const handleInputChange = (field, value) => {
+    setFormData((prev) => ({
       ...prev,
-      [`pricingDetail_${index}_start_date`]: {
-        status,
-        message,
-      },
-      [`pricingDetail_${index}_end_date`]: {
-        status,
-        message,
-      },
-      [`pricingDetail_${index}_season_price`]: {
-        status,
-        message,
-      },
-      [`pricingDetail_${index}_season_name`]: {
-        status,
-        message,
+      [field]: value,
+    }));
+  };
+
+  const handleNestedChange = (parent, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      [parent]: {
+        ...prev[parent],
+        [field]: value,
       },
     }));
   };
 
-  const handlePricePackageChange = (key, value, priceType) => {
-    setCustomPricePerPerson({ ...customPricePerPerson, [key]: value })
-    if (pricingValidation[key]) {
-      setPricingValidation({ ...pricingValidation, [key]: false })
-    }
-  }
-
-  const handleBlurPricing = (fieldName, value) => {
-    const updatedData = {
-      ...customPricePerPerson,
-      [fieldName]: value,
-    };
-
-    const cleanedData = normalizeEmptyFields(updatedData);
-    const fieldValidation = pricingValidationDetail(cleanedData);
-
-    setPricingValidation((prev) => ({
+  const handlePricingChange = (field, value, index = 0) => {
+    setFormData((prev) => ({
       ...prev,
-      [fieldName]: fieldValidation[fieldName],
+      pricing_data: {
+        ...prev.pricing_data,
+        fixed_departure: prev.pricing_data.fixed_departure.map((item, i) =>
+          i === index ? { ...item, [field]: value } : item
+        ),
+      },
     }));
-
   };
 
-  const pricingValidationDetail = (data) => {
-    let validate = {};
-
-    validate.base_price = NumberValidation(data?.base_price);
-    validate.currency = NonEmptyValidation(data?.currency);
-    validate.inclusion = NonEmptyValidation(data?.inclusion);
-    validate.exclusion = NonEmptyValidation(data?.exclusion);
-    validate.key_highlights = NonEmptyValidation(data?.key_highlights);
-    validate.cancellation_policy = NonEmptyValidation(data?.cancellation_policy);
-
-    return validate;
-  }
-
-
-  // Tags Creation
-
-  const [selectedCreatedTags, setCreatedTags] = useState([]);
-
-  const handleCreatedTags = (newValue) => {
-    setCreatedTags(newValue);
+  const handleCustomPricingChange = (field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      pricing_data: {
+        ...prev.pricing_data,
+        customized: {
+          ...prev.pricing_data.customized,
+          [field]: value,
+        },
+      },
+    }));
   };
 
-  const handleCreateOption = (inputValue) => {
-    const formattedLabel =
-      inputValue.charAt(0).toUpperCase() + inputValue.slice(1).toLowerCase();
+  const handleArrayChange = (field, value, isChecked) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: isChecked
+        ? [...prev[field], value]
+        : prev[field].filter((item) => item !== value),
+    }));
+  };
 
-    const newOption = {
-      label: formattedLabel,
-      value: formattedLabel,
+  const handleItineraryChange = (dayId, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      itineraryDays: prev.itineraryDays.map((day) =>
+        day.id === dayId ? { ...day, [field]: value } : day
+      ),
+    }));
+  };
+
+  const handleActivitiesChange = (dayId, activity, isChecked) => {
+    setFormData((prev) => ({
+      ...prev,
+      itineraryDays: prev.itineraryDays.map((day) =>
+        day.id === dayId
+          ? {
+              ...day,
+              activities: isChecked
+                ? [...day.activities, activity]
+                : day.activities.filter((a) => a !== activity),
+            }
+          : day
+      ),
+    }));
+  };
+
+  const handleMealPlanChange = (dayId, meal, isChecked) => {
+    setFormData((prev) => ({
+      ...prev,
+      itineraryDays: prev.itineraryDays.map((day) =>
+        day.id === dayId
+          ? {
+              ...day,
+              meal_plan: isChecked
+                ? [...day.meal_plan, meal]
+                : day.meal_plan.filter((m) => m !== meal),
+            }
+          : day
+      ),
+    }));
+  };
+
+  const toggleDay = (id) => {
+    setOpenDay(openDay === id ? null : id);
+  };
+
+  const addNewDay = () => {
+    const newId = formData.itineraryDays.length + 1;
+    setFormData((prev) => ({
+      ...prev,
+      itineraryDays: [
+        ...prev.itineraryDays,
+        {
+          id: newId,
+          day_number: newId,
+          title: `Day ${newId}: New Activity`,
+          description: "",
+          activities: [],
+          hotel_name: "",
+          meal_plan: [],
+        },
+      ],
+    }));
+  };
+
+  // Add items to arrays
+  const addHighlight = () => {
+    if (highlightsInput.trim()) {
+      setFormData((prev) => ({
+        ...prev,
+        highlights: [...prev.highlights, highlightsInput.trim()],
+      }));
+      setHighlightsInput("");
+    }
+  };
+
+  const addInclusion = () => {
+    if (inclusionsInput.trim()) {
+      setFormData((prev) => ({
+        ...prev,
+        inclusions: [...prev.inclusions, inclusionsInput.trim()],
+      }));
+      setInclusionsInput("");
+    }
+  };
+
+  const addExclusion = () => {
+    if (exclusionsInput.trim()) {
+      setFormData((prev) => ({
+        ...prev,
+        exclusions: [...prev.exclusions, exclusionsInput.trim()],
+      }));
+      setExclusionsInput("");
+    }
+  };
+
+  const addFaq = () => {
+    if (faqInput.trim()) {
+      setFormData((prev) => ({
+        ...prev,
+        faqs: [...prev.faqs, faqInput.trim()],
+      }));
+      setFaqInput("");
+    }
+  };
+
+  const addCustomPolicy = () => {
+    if (customPolicyInput.trim()) {
+      setFormData((prev) => ({
+        ...prev,
+        custom_policies: [
+          ...prev.custom_policies,
+          { title: "Custom Policy", content: customPolicyInput.trim() },
+        ],
+      }));
+      setCustomPolicyInput("");
+    }
+  };
+
+  // Remove items from arrays
+  const removeItem = (field, index) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index),
+    }));
+  };
+
+  // File handlers - UPDATED to handle file previews and base64 conversion
+  const handleHeroImageChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFormData((prev) => ({
+          ...prev,
+          hero_image: file,
+          hero_image_preview: e.target.result, // Base64 string for preview
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGalleryImagesChange = (event) => {
+    const files = Array.from(event.target.files);
+    const newPreviews = [];
+
+    files.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        newPreviews.push(e.target.result);
+
+        // When all files are processed, update state
+        if (newPreviews.length === files.length) {
+          setFormData((prev) => ({
+            ...prev,
+            gallery_images: [...prev.gallery_images, ...files],
+            gallery_previews: [...prev.gallery_previews, ...newPreviews],
+          }));
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Remove gallery image
+  const removeGalleryImage = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      gallery_images: prev.gallery_images.filter((_, i) => i !== index),
+      gallery_previews: prev.gallery_previews.filter((_, i) => i !== index),
+    }));
+  };
+
+  // Remove hero image
+  const removeHeroImage = () => {
+    setFormData((prev) => ({
+      ...prev,
+      hero_image: null,
+      hero_image_preview: null,
+    }));
+  };
+
+  // Convert file to base64 for submission
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  // Prepare data for API submission - UPDATED to include images
+  const prepareSubmissionData = async () => {
+    // Convert images to base64 or prepare for upload
+    let heroImageBase64 = null;
+    let galleryImagesBase64 = [];
+
+    if (formData.hero_image) {
+      heroImageBase64 = await fileToBase64(formData.hero_image);
+    }
+
+    if (formData.gallery_images.length > 0) {
+      for (const file of formData.gallery_images) {
+        const base64 = await fileToBase64(file);
+        galleryImagesBase64.push(base64);
+      }
+    }
+
+    const submissionData = {
+      title: formData.title,
+      overview: formData.overview,
+      destination_id: parseInt(formData.destination_id),
+      destination_type: formData.destination_type,
+      categories: formData.categories,
+      themes: formData.themes,
+      hotel_category: parseInt(formData.hotel_category) || 0,
+      pickup_location: formData.pickup_location,
+      drop_location: formData.drop_location,
+      days: parseInt(formData.days),
+      nights: parseInt(formData.nights),
+      meta_tags: `${formData.title}, ${formData.themes.join(", ")}`,
+      slug: formData.title.toLowerCase().replace(/\s+/g, "-"),
+      pricing_model: formData.pricing_model,
+      highlights: formData.highlights.join("; "),
+      inclusions: formData.inclusions.join("; "),
+      exclusions: formData.exclusions.join("; "),
+      faqs: formData.faqs.join("; "),
+      terms: formData.terms,
+      privacy_policy: formData.privacy_policy,
+      payment_terms: formData.payment_terms,
+
+      itinerary: formData.itineraryDays.map((day) => ({
+        day_number: day.day_number,
+        title: day.title,
+        description: day.description,
+        image_urls: [], // Would be actual URLs after upload
+        activities: day.activities,
+        hotel_name: day.hotel_name,
+        meal_plan: day.meal_plan,
+      })),
+
+      // UPDATED: Include actual image data in the media section
+      media: {
+        hero_image: heroImageBase64, // Base64 string of hero image
+        hero_image_name: formData.hero_image ? formData.hero_image.name : null,
+        hero_image_type: formData.hero_image ? formData.hero_image.type : null,
+        gallery_images: galleryImagesBase64, // Array of base64 strings
+        gallery_image_names: formData.gallery_images.map((file) => file.name),
+        gallery_image_types: formData.gallery_images.map((file) => file.type),
+
+        // Also include URL fields for backward compatibility
+        hero_image_url: formData.hero_image
+          ? `https://example.com/images/${formData.hero_image.name}`
+          : "https://example.com/images/hero.jpg",
+        thumbnail_url: formData.hero_image
+          ? `https://example.com/images/thumb_${formData.hero_image.name}`
+          : "https://example.com/images/thumb.jpg",
+        gallery_urls: formData.gallery_images.map(
+          (file, index) => `https://example.com/images/gallery${index + 1}.jpg`
+        ),
+      },
+
+      pricing: {
+        pricing_model: formData.pricing_model,
+        ...(formData.pricing_model === "fixed" && {
+          fixed_departure: formData.pricing_data.fixed_departure.map(
+            (item) => ({
+              from_date: `${item.from_date}T00:00:00`,
+              to_date: `${item.to_date}T00:00:00`,
+              available_slots: parseInt(item.available_slots),
+              title: item.title,
+              description: item.description || "",
+              base_price: parseInt(item.base_price),
+              discount: parseInt(item.discount) || 0,
+              final_price: parseInt(item.final_price),
+              booking_amount: parseInt(item.booking_amount) || 0,
+              gst_percentage: parseInt(item.gst_percentage) || 0,
+            })
+          ),
+        }),
+        ...(formData.pricing_model === "custom" && {
+          customized: {
+            pricing_type: formData.pricing_data.customized.pricing_type,
+            base_price: parseInt(formData.pricing_data.customized.base_price),
+            discount: parseInt(formData.pricing_data.customized.discount) || 0,
+            final_price: parseInt(formData.pricing_data.customized.final_price),
+          },
+        }),
+      },
+
+      policies: [
+        ...(formData.terms
+          ? [{ title: "Terms and Conditions", content: formData.terms }]
+          : []),
+        ...(formData.privacy_policy
+          ? [{ title: "Privacy Policy", content: formData.privacy_policy }]
+          : []),
+        ...(formData.payment_terms
+          ? [{ title: "Payment Terms", content: formData.payment_terms }]
+          : []),
+        ...formData.custom_policies,
+      ],
     };
 
-    setCreatedTags(prev => [...prev, newOption]);
+    return submissionData;
   };
 
-  const isFullyFilled = (obj) => {
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === "seasonal_pricing") {
-        if (!Array.isArray(value) || value.length === 0) return false;
+  const handleSubmit = async () => {
+    try {
+      const submissionData = await prepareSubmissionData();
+      // console.log("Submitting data:", JSON.stringify(submissionData, null, 2));
+      // console.log("Media section data:", submissionData.media);
 
-        for (const item of value) {
-          if (
-            !item.start_date ||
-            !item.end_date ||
-            !item.season_price ||
-            !item.season_name
-          ) {
-            return false;
-          }
-        }
-      } else {
-        if (!value || (typeof value === "string" && value.trim() === "")) {
-          return false;
-        }
-      }
+      dispatch(createTrip(submissionData))
+        .unwrap()
+        .then((result) => {
+          // console.log("Trip created successfully:", result);
+          toast.success("Trip created successfully!");
+        })
+        .catch((err) => {
+          console.error("Error creating trip:", err);
+          toast.error("Error creating trip. Please try again.");
+        });
+    } catch (error) {
+      console.error("Error preparing data:", error);
+      toast.error("Error preparing trip data. Please try again.");
     }
-
-    return true;
   };
 
-  // handleCustomPackageSubmit
-
-  const handleCustomPackageSubmit = async (e) => {
-
-    const filteredItinerary = itinerarys.filter(item => {
-      return item.day_title.trim() !== "" || item.day_description.trim() !== "";
-    });
-
-    if (filteredItinerary.length > 0) {
-      customizedPackageData.day_wise_itenary = filteredItinerary;
-    } else {
-      errorMsg("At least one itinerary should have a filled field");
-      return;
-    }
-
-    const isValidePricingDetail = pricingValidationDetail(customPricePerPerson)
-
-    customPricePerPerson.seasonal_pricing = pricingDetail
-
-    if (isFullyFilled(customPricePerPerson)) {
-      activePricingTab === 1 ? customizedPackageData.price_per_person = customPricePerPerson : customizedPackageData.price_per_package = customPricePerPerson
-    }
-
-    customizedPackageData.nights = (customizedPackageData?.days - 1).toString()
-    // if (selectedCreatedTags?.length !== 0) {
-    //   customizedPackageData.tags = selectedCreatedTags
-    // }
-
-    delete customizedPackageData.undefined
-
-    const cleanedData = normalizeEmptyFields(customizedPackageData);
-
-    const isValideFirst = validateDetails(cleanedData)
-
-
-    if (Object.values(isValideFirst).every((data) => data.status === true) &&
-      Object.values(isValidePricingDetail).every((data) => data.status === true)) {
-        console.log("validate success")
-      const response = await CreateTripPackage({ customizePackage: cleanedData })
-      if (response && response?.statusCode === 200) {
-        navigate(-1)
-        successMsg("Trip created successsfully")
-      }
-    }
-    else {
-      errorMsg("Please fill all the required fields")
-    }
-
-  }
-
-  const handleFixedPackageSubmit = async (e) => {
-
-    const filteredItinerary = itinerarys.filter(item => {
-      return item.day_title.trim() !== "" || item.day_description.trim() !== "";
-    });
-
-    if (filteredItinerary.length > 0) {
-      fixedPackageData.day_wise_itenary = filteredItinerary;
-    } else {
-      errorMsg("At least one itinerary should have a filled field");
-      return;
-    }
-
-    fixedPackageData.nights = (fixedPackageData?.days - 1).toString()
-    fixedPackageData.price_per_package = fixedPricePerPerson
-
-    if (selectedCreatedTags?.length !== 0) {
-      fixedPackageData.tags = selectedCreatedTags
-    }
-
-    const isAllStatusTrue = Object.values(departureSlotsValidation).every(entry =>
-      Object.values(entry).every(field => field.status === true)
-    );
-    if (isAllStatusTrue) {
-      fixedPackageData.departure_Slots = departureSlots
-    } else {
-      errorMsg("At least one departure slots should have a filled");
-      return;
-    }
-
-    const cleanedData = normalizeEmptyFields(fixedPackageData);
-    const isValideFirst = validateDetails(cleanedData)
-    const isValidePricePerPerson = FixedPricePerPackageValidation(cleanedData?.price_per_package)
-
-    if (Object.values(isValideFirst).every((data) => data.status === true) &&
-      Object.values(isValidePricePerPerson).every((data) => data.status === true)) {
-      const response = await CreateTripPackage({ fixedPackage: cleanedData })
-      if (response && response?.statusCode === 200) {
-        console.log(response, "response-FixedPackageSubmit")
-        navigate(-1)
-        successMsg("Trip created successsfully")
-      }
-      console.log("🙏 🙏 🙏 🙏 🙏 🙏")
-      console.log(fixedPackageData,"fixedPackageData-fixedPackageData")
-    }
-    else {
-      errorMsg("Please fill all the required fields")
-    }
-
-  }
-
-  return (
-    <div className='admin-content-main'>
-
-      <div className='d-flex justify-content-around mt-2'>
-        {sectionTabs.map((item, index) => (
-          <div className='trip-creation-steps cursor'>
-            <p className={`steps-main ${activeTab === item?.id ? 'active' : ''}`} onClick={() => setActiveTab(item?.id)}>{item?.id}</p>
-            <p className='step-para'>{item?.name}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className='mt-4 d-flex justify-content-between '>
-
-        {activeTab !== 1 && (
-          <button className={`admin-add-button ${activeTab === 0 ? 'disabled' : ''}`}
-            onClick={() => { setActiveTab(activeTab - 1); setValidation({}) }}><i className="fa-solid fa-arrow-left me-2"></i>Previous</button>
-        )}
-
-
-        {activeTab !== sectionTabs?.length && (
-          <button className={`admin-add-button ${activeTab === sectionTabs?.length ? 'disabled' : ''}`}
-            onClick={() => { setActiveTab(activeTab + 1); setValidation({}) }}>Next <i className="fa-solid fa-arrow-right ms-2"></i></button>
-        )}
-
-      </div>
-
-      <div className='trip-creation-form'>
-        <h4>{sectionTabs[activeTab - 1]?.id}.{sectionTabs[activeTab - 1]?.detail?.head}</h4>
-        <p>{sectionTabs[activeTab - 1]?.detail?.para}</p>
-      </div>
-
-      <div className='mt-3 mb-5'>
-
-        {activeTab == 1 && (
-          <>
-            <div className='d-flex mb-4'>
-              {TripTypeCard.map((item, index) => (
-                <div className={`trip-type-card ${activeTripTab === item?.id ? 'active' : ''}`} key={item?.id} onClick={() => setActiveTripTab(item?.id)}>
-                  <div className='my-auto'>
-                    <input type='checkbox' checked={activeTripTab === item?.id} />
-                  </div>
-                  <div className='d-flex flex-column trip-type-card-content ms-2'>
-                    <h6>{item?.head}</h6>
-                    <p>{item?.para}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {activeTab == 2 && activeTripTab == 1 && (
-
-          <>
-            <h3 className='my-3 mt-4 text-decoration-underline'>Customized Package</h3>
-            <div className='row'>
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Trip Title <span className='required-icon'>*</span></label>
-                  <input type="text" placeholder='Enter Trip Title' name="trip_title"
-                    value={customizedPackageData?.trip_title}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.trip_title?.status === false && validation?.trip_title?.message && (
-                    <p className='error-para'>Trip Title {validation.trip_title.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Destination  <span className='required-icon'>*</span></label>
-                  <select name="destination" value={customizedPackageData?.destination}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  >
-                    <option value="" defaultValue={""}>Select Destination</option>
-                    {destinationList?.map((item, index) => (
-                      <option key={index} value={item?._id}>{item?.destination_name}</option>
-                    ))}
-                  </select>
-                  {validation?.destination?.status === false && validation?.destination?.message && (
-                    <p className='error-para'>Destination {validation.destination.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Trip Category  <span className='required-icon'>*</span></label>
-                  <select name="trip_category" value={customizedPackageData?.trip_category}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  >
-                    <option value="" defaultValue={""}>Select Category</option>
-                    {categoryList?.map((item, index) => (
-                      <option key={index} value={item?._id}>{item?.name}</option>
-                    ))}
-                  </select>
-                  {validation?.trip_category?.status === false && validation?.trip_category?.message && (
-                    <p className='error-para'>Trip Category {validation.trip_category.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Slug <span className='required-icon'>*</span></label>
-                  <input type="text" placeholder='Enter Trip Title' name="slug"
-                    value={customizedPackageData?.slug}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.slug?.status === false && validation?.slug?.message && (
-                    <p className='error-para'>Slug {validation.slug.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Duration (Days) <span className='required-icon'>*</span></label>
-                  <input type="number" placeholder='Number of Days' name="days"
-                    value={customizedPackageData?.days}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                    onWheelCapture={e => { e.target.blur() }}
-                    onKeyDown={(evt) => ["e", "E", "+", "-",].includes(evt.key) && evt.preventDefault()} />
-                  {validation?.days?.status === false && validation?.days?.message && (
-                    <p className='error-para'>Days {validation.days.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Nights <span className='required-icon'>*</span></label>
-                  <input type="number" placeholder='Number of Nights' name="nights"
-                    value={customizedPackageData?.days > 0 ? customizedPackageData.days - 1 : ""}
-                    readOnly
-                    onWheelCapture={e => { e.target.blur() }}
-                    onKeyDown={(evt) => ["e", "E", "+", "-", "-1"].includes(evt.key) && evt.preventDefault()} />
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Short Description / Tagline <span className='required-icon'>*</span></label>
-                  <textarea type="text" placeholder='Short Description For Listing Pages' name="short_description"
-                    value={customizedPackageData?.short_description}
+  const renderStepContent = () => {
+    switch (activeStep) {
+      case "basic":
+        return (
+          <div className="container">
+            <h3 className="mb-4 fw-bold fs-5">Trip Details</h3>
+            <div className="row">
+              <div className="col-md-6">
+                <div className="mb-3">
+                  <label className="form-label">Trip Title *</label>
+                  <input
+                    type="text"
                     className="form-control"
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
+                    placeholder="Enter trip title"
+                    maxLength="100"
+                    value={formData.title}
+                    onChange={(e) => handleInputChange("title", e.target.value)}
                   />
-                  {validation?.short_description?.status === false && validation?.short_description?.message && (
-                    <p className='error-para'>Short Description {validation.short_description.message}</p>
-                  )}
+                  <small className="text-muted">
+                    {formData.title.length}/100 characters
+                  </small>
                 </div>
-              </div>
 
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Select Featured Trip Page </label>
-                  <select onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                    name="featured_trip_page"
-                    value={customizedPackageData?.featured_trip_page}>
-                    <option value="" defaultValue={""}>Select Featured Page</option>
-                    <option value="Home">Home</option>
-                    <option value="Destination">Destination</option>
-                    <option value="Payment Page">Payment Page</option>
+                <div className="mb-3">
+                  <label className="form-label">Trip Overview *</label>
+                  <textarea
+                    rows="3"
+                    className="form-control"
+                    placeholder="Describe the trip overview..."
+                    value={formData.overview}
+                    onChange={(e) =>
+                      handleInputChange("overview", e.target.value)
+                    }
+                  ></textarea>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label">Destination *</label>
+                  <select
+                    className="form-select"
+                    value={formData.destination_id}
+                    onChange={(e) =>
+                      handleInputChange("destination_id", e.target.value)
+                    }
+                  >
+                    <option value="">Select destination</option>
+                    {data?.data?.map((destination) => (
+                      <option key={destination.id} value={destination.id}>
+                        {destination.title}
+                      </option>
+                    ))}
                   </select>
                 </div>
-              </div>
 
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Pickup Location <span className='required-icon'>*</span></label>
-                  <input type="text" placeholder='Enter Pickup Location' name="pickup_location"
-                    value={customizedPackageData?.pickup_location}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.pickup_location?.status === false && validation?.pickup_location?.message && (
-                    <p className='error-para'>Pickup Location {validation.pickup_location.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Drop Location <span className='required-icon'>*</span></label>
-                  <input type="text" placeholder='Enter Drop Location' name="drop_location"
-                    value={customizedPackageData?.drop_location}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.drop_location?.status === false && validation?.drop_location?.message && (
-                    <p className='error-para'>Drop Location {validation.drop_location.message}</p>
-                  )}
-                </div>
-              </div>
-
-
-            </div>
-          </>
-
-        )}
-
-        {activeTab == 3 && activeTripTab == 1 && (
-          <>
-            <h3 className='my-3 mt-4 text-decoration-underline'>Customized Package</h3>
-
-            <div className='row'>
-              <div className='col-lg-12'>
-                <div className='admin-input-div'>
-                  <label className='text-area-label'>Long Description <span className='required-icon'>*</span></label>
-                  <div className="mt-2">
-                    <JoditEditor
-                      ref={editor}
-                      value={customizedPackageData?.long_description || ""}
-                      config={{
-                        readonly: false,
-                        height: 300,
-                        toolbarButtonSize: "middle",
-                        askBeforePasteHTML: false,
-                        askBeforePasteFromWord: false,
-                        defaultActionOnPaste: "insert_clear_html",
-                        allowPaste: true
-                      }}
-                      tabIndex={1}
-                      onBlur={(newContent) =>
-                        setCustomizedPackageData({
-                          ...customizedPackageData,
-                          long_description: newContent,
-                        })
+                <div className="mb-3">
+                  <label className="form-label d-block">
+                    Destination Type *
+                  </label>
+                  <div className="form-check form-check-inline">
+                    <input
+                      type="radio"
+                      name="destType"
+                      className="form-check-input"
+                      checked={formData.destination_type === "Domestic"}
+                      onChange={() =>
+                        handleInputChange("destination_type", "Domestic")
                       }
                     />
-                    {validation?.long_description?.status === false && validation?.long_description?.message && (
-                      <p className='error-para'>Long Description {validation.long_description.message}</p>
-                    )}
+                    <label className="form-check-label">Domestic</label>
                   </div>
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Tags to be used in search </label>
-                  <CreatableSelect
-                    isMulti
-                    placeholder="Type and Enter Tags"
-                    value={selectedCreatedTags}
-                    onChange={handleCreatedTags}
-                    onCreateOption={handleCreateOption}
-                  />
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className="admin-input-div">
-                  <label>Primary Trip Image <span className='required-icon'>*</span></label>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="form-control"
-                    onChange={(e) => handleFileUpload(e, "primary_trip_image", "customized")}
-                  />
-                  {validation?.primary_trip_image?.status === false && validation?.primary_trip_image?.message && (
-                    <p className='error-para'>Primary Trip Image {validation.primary_trip_image.message}</p>
-                  )}
-                  {customizedPackageData?.primary_trip_image && (
-                    <div className='upload-image-div destination-image-div'>
-                      <div className='upload-image-div'>
-                        <img src={`${BACKEND_DOMAIN}${customizedPackageData?.primary_trip_image}`} alt="Category-Preview" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-12'>
-                <div className='col-lg-6'>
-                  <div className="admin-input-div">
-                    <label>Add Hero Slider Images <span className='required-icon'>*</span></label>
+                  <div className="form-check form-check-inline">
                     <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      className="form-control"
-                      onChange={(e) => handleMultipleFileUpload(e, "hero_slider_images")}
+                      type="radio"
+                      name="destType"
+                      className="form-check-input"
+                      checked={formData.destination_type === "International"}
+                      onChange={() =>
+                        handleInputChange("destination_type", "International")
+                      }
                     />
-                    {validation?.hero_slider_images?.status === false && validation?.hero_slider_images?.message && (
-                      <p className='error-para'>Hero Slider Images {validation.hero_slider_images.message}</p>
-                    )}
-
-                    {customizedPackageData?.hero_slider_images && customizedPackageData?.hero_slider_images?.length > 0 && (
-                      <div className="d-flex flex-wrap">
-                        {customizedPackageData?.hero_slider_images?.map((image, index) => (
-                          <div className='upload-image-div destination-image-div'>
-                            <div>
-                              <img src={`${BACKEND_DOMAIN}${image}`} alt="Category-Preview" key={index} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <label className="form-check-label">International</label>
                   </div>
-
                 </div>
               </div>
 
+              <div className="col-md-6">
+                <div className="mb-3">
+                  <label className="form-label d-block">Categories *</label>
+                  {[
+                    "Honeymoon Packages",
+                    "Family Packages",
+                    "Friends",
+                    "Group Packages",
+                    "Solo Trips",
+                    "All-Girls Trips",
+                    "All-Boys Trips",
+                    "Volunteer Trips",
+                  ].map((cat) => (
+                    <div className="form-check" key={cat}>
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={formData.categories.includes(cat)}
+                        onChange={(e) =>
+                          handleArrayChange("categories", cat, e.target.checked)
+                        }
+                      />
+                      <label className="form-check-label">{cat}</label>
+                    </div>
+                  ))}
+                </div>
 
+                <div className="mb-3">
+                  <label className="form-label d-block">Trip Theme *</label>
+                  {[
+                    "Adventure",
+                    "Nature",
+                    "Religious",
+                    "Wildlife",
+                    "Water Activities",
+                  ].map((cat) => (
+                    <div className="form-check" key={cat}>
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={formData.themes.includes(cat)}
+                        onChange={(e) =>
+                          handleArrayChange("themes", cat, e.target.checked)
+                        }
+                      />
+                      <label className="form-check-label">{cat}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            {activeTripTab == 1 && (
-              <div className='itenary-main my-5'>
-                <div className='admin-input-div mt-0'>
-                  <label>Day Wise Itenary </label>
+            <h3 className="mb-4 fw-bold fs-5 mt-5">Location Details</h3>
+            <div className="row">
+              <div className="col-md-6">
+                <div className="mb-3">
+                  <label className="form-label">Pickup city *</label>
+                  <select
+                    className="form-select"
+                    value={formData.pickup_location}
+                    onChange={(e) =>
+                      handleInputChange("pickup_location", e.target.value)
+                    }
+                  >
+                    <option value="">Select city</option>
+                    {indianCities.map((city, index) => (
+                      <option key={index} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className='itenary-list-main mt-4 '>
-                  <div className='itenary-content mb-5'>
-                    <h5 className='text-center'>Itinerary Builder</h5>
-                    <p className='text-center'>Create day-by-day itinerary for your customized package</p>
+                <div className="mb-3">
+                  <label className="form-label">Drop city *</label>
+                  <select
+                    className="form-select"
+                    value={formData.drop_location}
+                    onChange={(e) =>
+                      handleInputChange("drop_location", e.target.value)
+                    }
+                  >
+                    <option value="">Select city</option>
+                    {indianCities.map((city, index) => (
+                      <option key={index} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="row">
+                  <div className="col-6 mb-3">
+                    <label className="form-label">Days *</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      placeholder="Days"
+                      value={formData.days}
+                      onChange={(e) =>
+                        handleInputChange("days", e.target.value)
+                      }
+                    />
                   </div>
+                  <div className="col-6 mb-3">
+                    <label className="form-label">Nights</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      placeholder="Nights"
+                      value={formData.nights}
+                      onChange={(e) =>
+                        handleInputChange("nights", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+                <small className="text-muted">
+                  Example: 5 Days 4 Nights should be less than Days!
+                </small>
+              </div>
 
-                  <div className="destination-faq">
-                    <div className="accordion" id="accordionExample">
-                      {itinerarys.map((itinerary, index) => (
-                        <div className='mt-4'>
-                          <div className="accordion-item" key={index} >
-                            <h2 className="accordion-header d-flex align-items-center justify-content-between">
-                              <button
-                                className="accordion-button flex-grow-1 fw-bold"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target={`#collapse${index}`}
-                                aria-expanded="true"
-                                aria-controls={`collapse${index}`}
-                              >
-                                DAY {index + 1}
-                              </button>
-                              <div className="ms-3 d-flex gap-2">
-                                <button className="destination-faq-add me-3" onClick={addItinerary}>
-                                  Add
-                                </button>
-                                {index !== 0 && (
-                                  <button
-                                    className="destination-faq-add faq-delete me-4"
-                                    onClick={() => deleteItinerary(index)}
-                                  >
-                                    Delete
-                                  </button>
-                                )}
-                              </div>
-                            </h2>
+              <div className="col-md-6">
+                <div className="mb-3">
+                  <label className="form-label d-block">Hotel Category *</label>
+                  {["1 Star", "2 Stars", "3 Stars", "4 Stars", "5 Stars"].map(
+                    (cat, index) => (
+                      <div className="form-check" key={cat}>
+                        <input
+                          type="radio"
+                          name="hotelCategory"
+                          className="form-check-input"
+                          checked={
+                            formData.hotel_category === (index + 1).toString()
+                          }
+                          onChange={() =>
+                            handleInputChange(
+                              "hotel_category",
+                              (index + 1).toString()
+                            )
+                          }
+                        />
+                        <label className="form-check-label">{cat}</label>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
 
-                            <div
-                              id={`collapse${index}`}
-                              className="accordion-collapse collapse show"
-                              data-bs-parent="#accordionExample"
-                            >
-                              <div className="accordion-body">
-                                <div className="admin-input-div mb-3">
-                                  <label className=''>Day Title <span className='required-icon'>*</span></label>
-                                  <input
-                                    type="text"
-                                    className="form-control"
-                                    value={itinerary?.day_title}
-                                    placeholder="Enter Day Title"
-                                    onChange={(e) =>
-                                      updateItinerary(index, "day_title", e.target.value)
-                                    }
-                                    onBlur={() => handleBlurCustomizedItinerary(index)}
-                                  />
-                                  {validation[`itinerarys_${index}_day_title`]?.status === false && (
-                                    <div className="text-danger small">
-                                      {validation[`itinerarys_${index}_day_title`].message}
-                                    </div>
-                                  )}
-                                </div>
+      case "itinerary":
+        return (
+          <div className="form-container">
+            <h3 className="mb-4 font-bold text-lg">Trip Itinerary</h3>
+            {formData.itineraryDays.map((day) => (
+              <div
+                key={day.id}
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  marginBottom: "12px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    background: "#f8f9fa",
+                    padding: "12px 16px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => toggleDay(day.id)}
+                >
+                  <span className="font-medium">{day.title}</span>
+                  {openDay === day.id ? (
+                    <ChevronUp size={18} />
+                  ) : (
+                    <ChevronDown size={18} />
+                  )}
+                </div>
 
-                                <div className="admin-input-div admin-desti-faq">
-                                  <label>Day Description <span className='required-icon'>*</span></label>
-                                  {/* <textarea
-                                    className="form-control"
-                                    placeholder="Enter Day Description"
-                                    value={itinerary?.day_description}
-                                    onChange={(e) =>
-                                      updateItinerary(index, "day_description", e.target.value)
-                                    }
-                                    onBlur={(e) => handleBlurCustomizedItinerary(index, "day_description", e.target.value)}
-                                  /> */}
-                                  <JoditEditor
-                                    ref={editor}
-                                    value={itinerary?.day_description}
-                                    config={{
-                                      readonly: false,
-                                      height: 350,
-                                      toolbarButtonSize: "middle",
-                                      askBeforePasteHTML: false,
-                                      askBeforePasteFromWord: false,
-                                      defaultActionOnPaste: "insert_clear_html",
-                                      allowPaste: true
-                                    }}
-                                    onBlur={(value) => {
-                                      handleBlurCustomizedItinerary(index);
-                                      updateItinerary(index, "day_description", value);
-                                    }}
-                                  />
-                                  {validation[`itinerarys_${index}_day_description`]?.status === false && (
-                                    <div className="text-danger small">
-                                      {validation[`itinerarys_${index}_day_description`].message}
-                                    </div>
-                                  )}
-                                </div>
+                {openDay === day.id && (
+                  <div style={{ padding: "16px", background: "#fff" }}>
+                    <div className="form-group">
+                      <label>Day Title *</label>
+                      <input
+                        type="text"
+                        value={day.title}
+                        onChange={(e) =>
+                          handleItineraryChange(day.id, "title", e.target.value)
+                        }
+                      />
+                    </div>
 
-                                <div className='col-lg-6'>
-                                  <div className='admin-input-div'>
-                                    <label>Select Activity</label>
-                                    <Select
-                                      isMulti
-                                      placeholder="Select Activity"
-                                      options={activityOptions}
-                                      value={activityOptions.filter(opt => selectedActivities.includes(opt.value))}
-                                      onChange={(selected) =>
-                                        setSelectedActivities(selected ? selected.map(item => item.value) : [])
-                                      }
-                                    />
-                                  </div>
-                                </div>
+                    <div className="form-group">
+                      <label>Description</label>
+                      <textarea
+                        rows="3"
+                        placeholder="Trip Description"
+                        value={day.description}
+                        onChange={(e) =>
+                          handleItineraryChange(
+                            day.id,
+                            "description",
+                            e.target.value
+                          )
+                        }
+                      ></textarea>
+                    </div>
 
-                                <div className="admin-input-div admin-desti-faq">
-                                  <label>Day Images (Optional) </label>
-                                  <input
-                                    type="file"
-                                    multiple
-                                    accept="image/*"
-                                    className="form-control"
-                                    onChange={(e) => handleMultipleFileUpload(e, "day_images", index)}
-                                  />
+                    <div className="form-group">
+                      <label>Select Activities</label>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "12px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        {[
+                          "City Tour",
+                          "Beach Visit",
+                          "Trekking",
+                          "Sightseeing",
+                          "Shopping",
+                          "Adventure Sports",
+                        ].map((activity) => (
+                          <label
+                            key={activity}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={day.activities.includes(activity)}
+                              onChange={(e) =>
+                                handleActivitiesChange(
+                                  day.id,
+                                  activity,
+                                  e.target.checked
+                                )
+                              }
+                            />
+                            {activity}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
 
+                    <div className="form-group">
+                      <label>Hotel Name *</label>
+                      <input
+                        type="text"
+                        placeholder="Hotel Name"
+                        value={day.hotel_name}
+                        onChange={(e) =>
+                          handleItineraryChange(
+                            day.id,
+                            "hotel_name",
+                            e.target.value
+                          )
+                        }
+                      />
+                    </div>
 
-                                  {itinerary?.day_images && itinerary?.day_images?.length > 0 && (
-                                    <div className="d-flex flex-wrap">
-                                      {itinerary?.day_images?.map((image, index) => (
-                                        <div className='upload-image-div destination-image-div'>
-                                          <div>
-                                            <img src={`${BACKEND_DOMAIN}${image}`} alt="Category-Preview" key={index} />
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
+                    <div className="form-group">
+                      <label>Meal Plan</label>
+                      <div style={{ display: "flex", gap: "12px" }}>
+                        {["Breakfast", "Lunch", "Dinner"].map((meal) => (
+                          <label key={meal}>
+                            <input
+                              type="checkbox"
+                              checked={day.meal_plan.includes(meal)}
+                              onChange={(e) =>
+                                handleMealPlanChange(
+                                  day.id,
+                                  meal,
+                                  e.target.checked
+                                )
+                              }
+                            />
+                            {meal}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
 
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+            <button
+              onClick={addNewDay}
+              style={{
+                marginTop: "12px",
+                padding: "8px 16px",
+                background: "#2563eb",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+              }}
+            >
+              + Add Another Day
+            </button>
+          </div>
+        );
+
+      case "media":
+        return (
+          <div className="form-container">
+            <div className="media-header">
+              <h3>Media Assets</h3>
+              <p>Upload images and videos for your trip package</p>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-around" }}>
+              <div className="media-section">
+                <div className="section-title">
+                  📷 Hero Image / Thumbnail <span className="required">*</span>
+                </div>
+                <div
+                  className="upload-area"
+                  onClick={() => document.getElementById("heroImage")?.click()}
+                >
+                  <div className="upload-icon">📷</div>
+                  <div className="upload-text">
+                    <h4>Upload Hero Image</h4>
+                    <p>Drag and drop or click to browse</p>
+                    {formData.hero_image && (
+                      <p>Selected: {formData.hero_image.name}</p>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    id="heroImage"
+                    className="file-input"
+                    accept="image/*"
+                    onChange={handleHeroImageChange}
+                  />
+                </div>
+                <div className="file-restrictions">
+                  • Use high quality JPG, PNG or WebP format
+                  <br />
+                  • Recommended size: 1200x800 pixels
+                  <br />
+                  • Maximum file size: 5MB
+                  <br />• This will be the main image that represents your trip
+                  package
+                </div>
+              </div>
+              <div className="media-section">
+                <div className="section-title">
+                  🖼️ Image Gallery <span className="required">*</span>
+                </div>
+                <div
+                  className="upload-area"
+                  onClick={() =>
+                    document.getElementById("galleryImages")?.click()
+                  }
+                >
+                  <div className="upload-icon">🖼️</div>
+                  <div className="upload-text">
+                    <h4>Image Gallery</h4>
+                    <p>Add multiple images</p>
+                    {formData.gallery_images.length > 0 && (
+                      <p>Selected: {formData.gallery_images.length} files</p>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    id="galleryImages"
+                    className="file-input"
+                    accept="image/*"
+                    multiple
+                    onChange={handleGalleryImagesChange}
+                  />
+                </div>
+                <div className="file-restrictions">
+                  Gallery best practices: • Upload 5-10 high-quality images
+                  <br />
+                  • Show different attractions and activities
+                  <br />
+                  • Include both landscape and close-up shots
+                  <br />
+                  • Maintain consistent quality and style
+                  <br />• Recommended size: 1200x800px minimum
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case "pricing":
+        return (
+          <div className="container">
+            <h5 className="mb-3 fw-bold">Pricing Model *</h5>
+
+            <div className="row mb-4">
+              <div className="col-md-6">
+                <div
+                  className={`p-3 border rounded d-flex align-items-center ${
+                    selectedPricing === "fixed" ? "border-primary" : ""
+                  }`}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    setSelectedPricing("fixed");
+                    handleInputChange("pricing_model", "fixed");
+                  }}
+                >
+                  <input
+                    type="radio"
+                    className="form-check-input me-2"
+                    checked={selectedPricing === "fixed"}
+                    onChange={() => {
+                      setSelectedPricing("fixed");
+                      handleInputChange("pricing_model", "fixed");
+                    }}
+                  />
+                  <div>
+                    <label className="form-check-label fw-bold">
+                      Fixed Departure
+                    </label>
+                    <div className="small text-muted">
+                      Set specific dates with group bookings
                     </div>
                   </div>
                 </div>
               </div>
+              <div className="col-md-6">
+                <div
+                  className={`p-3 border rounded d-flex align-items-center ${
+                    selectedPricing === "custom" ? "border-primary" : ""
+                  }`}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    setSelectedPricing("custom");
+                    handleInputChange("pricing_model", "custom");
+                  }}
+                >
+                  <input
+                    type="radio"
+                    className="form-check-input me-2"
+                    checked={selectedPricing === "custom"}
+                    onChange={() => {
+                      setSelectedPricing("custom");
+                      handleInputChange("pricing_model", "custom");
+                    }}
+                  />
+                  <div>
+                    <label className="form-check-label fw-bold">
+                      Customized Trip
+                    </label>
+                    <div className="small text-muted">
+                      Flexible dates based on customer preference
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {selectedPricing === "fixed" && (
+              <>
+                <h6 className="fw-bold mb-2">Available Slots</h6>
+                <div className="row mb-3">
+                  <div className="col-md-4">
+                    <label className="form-label">From Date *</label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={formData.pricing_data.fixed_departure[0].from_date}
+                      onChange={(e) =>
+                        handlePricingChange("from_date", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">To Date *</label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      value={formData.pricing_data.fixed_departure[0].to_date}
+                      onChange={(e) =>
+                        handlePricingChange("to_date", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Available Slots *</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      placeholder="10"
+                      value={
+                        formData.pricing_data.fixed_departure[0].available_slots
+                      }
+                      onChange={(e) =>
+                        handlePricingChange("available_slots", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+
+                <h6 className="fw-bold mb-2">Costing Packages</h6>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <label className="form-label">Package Title *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. Triple Occupancy"
+                      value={formData.pricing_data.fixed_departure[0].title}
+                      onChange={(e) =>
+                        handlePricingChange("title", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="col-md-3">
+                    <label className="form-label">Base Price (₹) *</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={
+                        formData.pricing_data.fixed_departure[0].base_price
+                      }
+                      onChange={(e) =>
+                        handlePricingChange("base_price", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="col-md-3">
+                    <label className="form-label">Discount (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.pricing_data.fixed_departure[0].discount}
+                      onChange={(e) =>
+                        handlePricingChange("discount", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="row mb-3">
+                  <div className="col-md-4">
+                    <label className="form-label">Final Price (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={
+                        formData.pricing_data.fixed_departure[0].final_price
+                      }
+                      onChange={(e) =>
+                        handlePricingChange("final_price", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Booking Amount (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={
+                        formData.pricing_data.fixed_departure[0].booking_amount
+                      }
+                      onChange={(e) =>
+                        handlePricingChange("booking_amount", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">GST Percentage (%)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={
+                        formData.pricing_data.fixed_departure[0].gst_percentage
+                      }
+                      onChange={(e) =>
+                        handlePricingChange("gst_percentage", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+              </>
             )}
 
-          </>
-        )}
-
-        {activeTab == 4 && activeTripTab == 1 && (
-          <>
-            <h3 className='my-3 mt-4 text-decoration-underline'>Customized Package</h3>
-            {activeTripTab == 1 && (
-              <div className='d-flex mb-4'>
-                {PricingTab.map((item, index) => (
-                  <div className={`trip-type-card ${activePricingTab === item?.id ? 'active' : ''} pricing-tab-card`} key={item?.id} onClick={() => { setActivePricingTab(item?.id); setPricingValidation({}) }}>
-                    <div className='d-flex flex-column trip-type-card-content ms-2'>
-                      <h6>{item?.head}</h6>
-                      <p>{item?.para}</p>
+            {selectedPricing === "custom" && (
+              <>
+                <h6 className="fw-bold mb-2">Customized Pricing</h6>
+                <div className="row mb-3">
+                  <div className="col-md-6">
+                    <label className="form-label d-block">Pricing Type *</label>
+                    <div className="form-check form-check-inline">
+                      <input
+                        type="radio"
+                        name="pricingType"
+                        className="form-check-input"
+                        checked={
+                          formData.pricing_data.customized.pricing_type ===
+                          "Price Per Person"
+                        }
+                        onChange={() =>
+                          handleCustomPricingChange(
+                            "pricing_type",
+                            "Price Per Person"
+                          )
+                        }
+                      />
+                      <label className="form-check-label">
+                        Price Per Person
+                      </label>
                     </div>
+                    <div className="form-check form-check-inline">
+                      <input
+                        type="radio"
+                        name="pricingType"
+                        className="form-check-input"
+                        checked={
+                          formData.pricing_data.customized.pricing_type ===
+                          "Price Per Package"
+                        }
+                        onChange={() =>
+                          handleCustomPricingChange(
+                            "pricing_type",
+                            "Price Per Package"
+                          )
+                        }
+                      />
+                      <label className="form-check-label">
+                        Price Per Package
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="row mb-3">
+                  <div className="col-md-4">
+                    <label className="form-label">Base Price (₹) *</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.pricing_data.customized.base_price}
+                      onChange={(e) =>
+                        handleCustomPricingChange("base_price", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Discount (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.pricing_data.customized.discount}
+                      onChange={(e) =>
+                        handleCustomPricingChange("discount", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Final Price (₹)</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={formData.pricing_data.customized.final_price}
+                      onChange={(e) =>
+                        handleCustomPricingChange("final_price", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+
+      case "details":
+        return (
+          <div className="form-container details">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-around",
+                margin: "20px",
+              }}
+            >
+              <div
+                style={{
+                  border: "1px solid black",
+                  width: "800px",
+                  padding: "20px",
+                }}
+                className="form-container"
+              >
+                <h3>Trip Highlight</h3>
+                <label>Add Trip Highlight</label>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-around",
+                    marginBottom: "10px",
+                  }}
+                >
+                  <input
+                    type="text"
+                    placeholder="TajMahal"
+                    value={highlightsInput}
+                    onChange={(e) => setHighlightsInput(e.target.value)}
+                    style={{ width: "70%" }}
+                  />
+                  <button onClick={addHighlight}>+</button>
+                </div>
+                <div>
+                  {formData.highlights.map((highlight, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      <span>{highlight}</span>
+                      <button onClick={() => removeItem("highlights", index)}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid black",
+                  width: "800px",
+                  padding: "20px",
+                }}
+                className="form-container"
+              >
+                <h3>Inclusions</h3>
+                <label>Add Inclusions</label>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-around",
+                    marginBottom: "10px",
+                  }}
+                >
+                  <input
+                    type="text"
+                    placeholder="4 Nights"
+                    value={inclusionsInput}
+                    onChange={(e) => setInclusionsInput(e.target.value)}
+                    style={{ width: "70%" }}
+                  />
+                  <button onClick={addInclusion}>+</button>
+                </div>
+                <div>
+                  {formData.inclusions.map((inclusion, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      <span>{inclusion}</span>
+                      <button onClick={() => removeItem("inclusions", index)}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-around",
+                margin: "20px",
+              }}
+            >
+              <div
+                style={{
+                  border: "1px solid black",
+                  width: "800px",
+                  padding: "20px",
+                }}
+                className="form-container"
+              >
+                <h3>Exclusions</h3>
+                <label>Add Exclusions</label>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-around",
+                    marginBottom: "10px",
+                  }}
+                >
+                  <input
+                    type="text"
+                    placeholder="Personal expenses"
+                    value={exclusionsInput}
+                    onChange={(e) => setExclusionsInput(e.target.value)}
+                    style={{ width: "70%" }}
+                  />
+                  <button onClick={addExclusion}>+</button>
+                </div>
+                <div>
+                  {formData.exclusions.map((exclusion, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      <span>{exclusion}</span>
+                      <button onClick={() => removeItem("exclusions", index)}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid black",
+                  width: "800px",
+                  padding: "20px",
+                }}
+                className="form-container"
+              >
+                <h3>FAQ (Optional)</h3>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-around",
+                    marginBottom: "10px",
+                  }}
+                >
+                  <input
+                    type="text"
+                    placeholder="Add FAQ question and answer"
+                    value={faqInput}
+                    onChange={(e) => setFaqInput(e.target.value)}
+                    style={{ width: "70%" }}
+                  />
+                  <button onClick={addFaq}>Add FAQ</button>
+                </div>
+                <div>
+                  {formData.faqs.map((faq, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "5px",
+                      }}
+                    >
+                      <span>{faq}</span>
+                      <button onClick={() => removeItem("faqs", index)}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case "policies":
+        return (
+          <div className="form-container">
+            <h5>Terms and Conditions</h5>
+
+            <div className="form-group">
+              <label>Terms and Conditions Content</label>
+              <textarea
+                rows="3"
+                placeholder="Enter terms and conditions"
+                value={formData.terms}
+                onChange={(e) => handleInputChange("terms", e.target.value)}
+              ></textarea>
+            </div>
+
+            <div className="form-group">
+              <label>Privacy Policy Content</label>
+              <textarea
+                rows="3"
+                placeholder="Enter privacy policy"
+                value={formData.privacy_policy}
+                onChange={(e) =>
+                  handleInputChange("privacy_policy", e.target.value)
+                }
+              ></textarea>
+            </div>
+
+            <div className="form-group">
+              <label>Payment Content</label>
+              <textarea
+                rows="3"
+                placeholder="Enter payment details"
+                value={formData.payment_terms}
+                onChange={(e) =>
+                  handleInputChange("payment_terms", e.target.value)
+                }
+              ></textarea>
+            </div>
+
+            <div className="form-group">
+              <label>Custom Policy</label>
+              <textarea
+                rows="3"
+                placeholder="Enter custom policy"
+                value={customPolicyInput}
+                onChange={(e) => setCustomPolicyInput(e.target.value)}
+              ></textarea>
+              <button type="button" onClick={addCustomPolicy}>
+                Add new Policy
+              </button>
+              <div>
+                {formData.custom_policies.map((policy, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      marginTop: "10px",
+                      padding: "10px",
+                      border: "1px solid #ddd",
+                    }}
+                  >
+                    <strong>{policy.title}</strong>
+                    <p>{policy.content}</p>
+                    <button
+                      onClick={() => removeItem("custom_policies", index)}
+                    >
+                      Remove
+                    </button>
                   </div>
                 ))}
               </div>
-            )}
-
-            {activeTripTab == 2 && (
-              <div className='d-flex mb-4'>
-                <div className={`trip-type-card ${activePricingTab === 1 ? 'active' : ''} pricing-tab-card`} onClick={() => setActivePricingTab(1)}>
-                  <div className='d-flex flex-column trip-type-card-content ms-2'>
-                    <h6>{PricingTab[1]?.head}</h6>
-                    <p>{PricingTab[1]?.para}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <>
-              <h3>Customized Package - Price Per Person</h3>
-              <div className='itenary-main my-5'>
-                <h5 className='fw-bold mb-4'>Price Configuration</h5>
-                <div className='row'>
-                  <div className='col-lg-6'>
-                    <div className='admin-input-div mt-0'>
-                      <label>Base Price <span className='required-icon'>*</span></label>
-                      <input type="number" placeholder='Base Price' name='base_price'
-                        value={customPricePerPerson?.base_price}
-                        onChange={(e) => handlePricePackageChange("base_price", e.target.value, "per_person")}
-                        onBlur={(e) => handleBlurPricing(e.target.name, e.target.value)}
-                        onWheelCapture={e => { e.target.blur() }}
-                        onKeyDown={(evt) => ["e", "E", "+", "-"].includes(evt.key) && evt.preventDefault()}
-                      />
-                      {pricingValidation?.base_price?.status === false && pricingValidation?.base_price?.message && (
-                        <p className='error-para'>Base Pricing {pricingValidation.base_price.message}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className='col-lg-6'>
-                    <div className='admin-input-div mt-0'>
-                      <label>Currency  <span className='required-icon'>*</span></label>
-                      <select value={customPricePerPerson?.currency} name='currency'
-                        onChange={(e) => handlePricePackageChange("currency", e.target.value, "per_person")}
-                        onBlur={(e) => handleBlurPricing(e.target.name, e.target.value)}>
-                        <option value="" defaultValue={""}>Select Currency</option>
-                        <option value="INR">INR (₹)</option>
-                        <option value="USD">USD ($)</option>
-                        <option value="EURO">EURO (€)</option>
-                      </select>
-                      {pricingValidation?.currency?.status === false && pricingValidation?.currency?.message && (
-                        <p className='error-para'>Currency {pricingValidation.currency.message}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className='col-lg-6'>
-                    <div className='admin-input-div'>
-                      <label>Discounted Price (Optional)</label>
-                      <input type="number" placeholder='Enter Discounted Price'
-                        value={customPricePerPerson?.discount_price} name='discount_price'
-                        onChange={(e) => handlePricePackageChange("discount_price", e.target.value, "per_person")}
-                        onWheelCapture={e => { e.target.blur() }}
-                        onKeyDown={(evt) => ["e", "E", "+", "-"].includes(evt.key) && evt.preventDefault()} />
-                      {pricingValidation?.discount_price?.status === false && pricingValidation?.discount_price?.message && (
-                        <p className='error-para'>Discounted Price {pricingValidation.discount_price.message}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className='col-lg-4'>
-                    <div className='admin-input-div'>
-                      <label>Display as "Starts From" Price (Optional)</label>
-                      <select value={customPricePerPerson?.start_from} name='start_from'
-                        onChange={(e) => handlePricePackageChange("start_from", e.target.value, "per_person")}
-                      >
-                        <option value="" defaultValue={""}>Select Dispay Type</option>
-                        <option value="yes">Yes</option>
-                        <option value="no">No</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    {/* <div className='col-lg-4'>
-                      <div className='admin-input-div'>
-                        <label>Display as "Starts From" Price (Optional)</label>
-                        <label className="switch">
-                          <input type="checkbox" checked={customPricePerPerson?.start_from}
-                            onChange={(e) => handlePricePackageChange(e.target.checked)} name='start_from' />
-                          <span className="slider-table round"></span>
-                        </label>
-                      </div>
-                    </div> */}
-                  </div>
-
-                </div>
-
-                {activeTripTab == 1 && (
-                  <div className='itenary-list-main mt-4 '>
-                    <div className='itenary-content mb-5'>
-                      <h5 className='text-center'>Seasonal Pricing (Optional)</h5>
-                      <p className='text-center'>Add different prices for different seasons or dates</p>
-                    </div>
-
-                    <div className="destination-faq">
-                      <div className="accordion" id="accordionExample">
-                        {pricingDetail.map((pricing, index) => (
-                          <div className='mt-4'>
-                            <div className="accordion-item" key={index} >
-                              <h2 className="accordion-header d-flex align-items-center justify-content-between">
-                                <button
-                                  className="accordion-button flex-grow-1 fw-bold"
-                                  type="button"
-                                  data-bs-toggle="collapse"
-                                  data-bs-target={`#collapse${index}`}
-                                  aria-expanded="true"
-                                  aria-controls={`collapse${index}`}
-                                >
-                                  Season {index + 1}
-                                </button>
-                                <div className="ms-3 d-flex gap-2">
-
-                                  <button className="destination-faq-add me-4" onClick={() => addPricingDetail("pricingPerPerson")}>
-                                    Add
-                                  </button>
-
-                                  {index !== 0 && (
-                                    <button
-                                      className="destination-faq-add faq-delete me-4"
-                                      onClick={() => deletePricingDetail(index, "pricingPerPerson")}
-                                    >
-                                      Delete
-                                    </button>
-                                  )}
-                                </div>
-                              </h2>
-
-                              <div
-                                id={`collapse${index}`}
-                                className="accordion-collapse collapse show"
-                                data-bs-parent="#accordionExample"
-                              >
-                                <div className="accordion-body">
-
-                                  <div className='row'>
-                                    <div className='col-lg-6'>
-                                      <div className='admin-input-div mt-0'>
-                                        <label>Start Date<span className='required-icon'>*</span></label>
-                                        <DatePicker
-                                          selected={pricingDetail[index].start_date ? new Date(pricingDetail[index].start_date) : null}
-                                          onChange={(date) => updatePricingDetail(index, "start_date", date, "pricingPerPerson")}
-                                          onBlur={() => handleBlurPricingDetails(index)}
-                                          placeholderText="Select Start Date"
-                                          minDate={new Date()}
-                                          className="w-100"
-                                        />
-                                        {pricingValidation[`pricingDetail_${index}_start_date`]?.status === false && (
-                                          <div className="text-danger small">
-                                            {pricingValidation[`pricingDetail_${index}_start_date`].message}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    <div className='col-lg-6 '>
-                                      <div className='admin-input-div mt-0'>
-                                        <label>End Date <span className='required-icon'>*</span></label>
-                                        <DatePicker
-                                          selected={pricingDetail[index].end_date ? new Date(pricingDetail[index].end_date) : null}
-                                          onChange={(date) => updatePricingDetail(index, "end_date", date, "pricingPerPerson")}
-                                          onBlur={() => handleBlurPricingDetails(index)}
-                                          placeholderText="Select End Date"
-                                          minDate={new Date()}
-                                          className="w-100"
-                                        />
-                                        {pricingValidation[`pricingDetail_${index}_end_date`]?.status === false && (
-                                          <div className="text-danger small">
-                                            {pricingValidation[`pricingDetail_${index}_end_date`].message}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    <div className='col-lg-6'>
-                                      <div className='admin-input-div'>
-                                        <label>Season Price <span className='required-icon'>*</span></label>
-                                        <input type="number" placeholder='Enter Discounted Price' name="season_price"
-                                          value={pricing?.season_price}
-                                          onChange={(e) => updatePricingDetail(index, "season_price", e.target.value, "pricingPerPerson")}
-                                          onWheelCapture={e => { e.target.blur() }}
-                                          onBlur={() => handleBlurPricingDetails(index)}
-                                          onKeyDown={(evt) => ["e", "E", "+", "-"].includes(evt.key) && evt.preventDefault()} />
-                                      </div>
-                                      {pricingValidation[`pricingDetail_${index}_season_price`]?.status === false && (
-                                        <div className="text-danger small">
-                                          {pricingValidation[`pricingDetail_${index}_season_price`].message}
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className='col-lg-6'>
-                                      <div className='admin-input-div'>
-                                        <label>Season Name <span className='required-icon'>*</span></label>
-                                        <input type="text" placeholder='Enter Discounted Price' name="season_name"
-                                          value={pricing?.season_name}
-                                          onBlur={() => handleBlurPricingDetails(index)}
-                                          onChange={(e) => updatePricingDetail(index, "season_name", e.target.value, "pricingPerPerson")}
-                                        />
-                                        {pricingValidation[`pricingDetail_${index}_season_name`]?.status === false && (
-                                          <div className="text-danger small">
-                                            {pricingValidation[`pricingDetail_${index}_season_name`].message}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className='row'>
-                <div className='col-lg-12'>
-                  <div className='admin-input-div'>
-                    <label className='text-area-label'>Inclusion <span className='required-icon'>*</span></label>
-                    <div className="mt-2">
-                      <JoditEditor
-                        ref={editor}
-                        value={customPricePerPerson?.inclusion}
-                        config={{
-                          readonly: false,
-                          height: 350,
-                          toolbarButtonSize: "middle",
-                          askBeforePasteHTML: false,
-                          askBeforePasteFromWord: false,
-                          defaultActionOnPaste: "insert_clear_html",
-                          allowPaste: true
-                        }}
-                        tabIndex={1}
-                        onBlur={(newContent) => handlePricePackageChange("inclusion", newContent, "per_person")}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className='col-lg-12'>
-                  <div className='admin-input-div'>
-                    <label className='text-area-label'>Exclusion <span className='required-icon'>*</span></label>
-                    <div className="mt-2">
-                      <JoditEditor
-                        ref={editor}
-                        value={customPricePerPerson?.exclusion}
-                        config={{
-                          readonly: false,
-                          height: 350,
-                          toolbarButtonSize: "middle",
-                          askBeforePasteHTML: false,
-                          askBeforePasteFromWord: false,
-                          defaultActionOnPaste: "insert_clear_html",
-                          allowPaste: true
-                        }}
-                        tabIndex={1}
-                        onBlur={(newContent) => handlePricePackageChange("exclusion", newContent, "per_person")}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className='col-lg-12'>
-                  <div className='admin-input-div'>
-                    <label className='text-area-label'>Key Highlights/Features <span className='required-icon'>*</span></label>
-                    <div className="mt-2">
-                      <JoditEditor
-                        ref={editor}
-                        value={customPricePerPerson?.key_highlights}
-                        config={{
-                          readonly: false,
-                          height: 350,
-                          toolbarButtonSize: "middle",
-                          askBeforePasteHTML: false,
-                          askBeforePasteFromWord: false,
-                          defaultActionOnPaste: "insert_clear_html",
-                          allowPaste: true
-                        }}
-                        tabIndex={1}
-                        onBlur={(newContent) => handlePricePackageChange("key_highlights", newContent, "per_person")}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className='col-lg-12'>
-                  <div className='admin-input-div'>
-                    <label className='text-area-label'>Cancellation Policy <span className='required-icon'>*</span></label>
-                    <div className="mt-2">
-                      <JoditEditor
-                        ref={editor}
-                        value={customPricePerPerson?.cancellation_policy}
-                        config={{
-                          readonly: false,
-                          height: 350,
-                          toolbarButtonSize: "middle",
-                          askBeforePasteHTML: false,
-                          askBeforePasteFromWord: false,
-                          defaultActionOnPaste: "insert_clear_html",
-                          allowPaste: true
-                        }}
-                        tabIndex={1}
-                        onBlur={(newContent) => handlePricePackageChange("cancellation_policy", newContent, "per_person")}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          </>
-        )}
-
-        {activeTab == 5 && activeTripTab == 1 && (
-          <>
-            <h3 className='my-3 mt-4 text-decoration-underline'>Customized Package</h3>
-            <div className='row'>
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Meta Title <span className='required-icon'>*</span></label>
-                  <textarea type="text" placeholder='Enter Meta Title' name="meta_title"
-                    value={customizedPackageData?.meta_title}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.meta_title?.status === false && validation?.meta_title?.message && (
-                    <p className='error-para'>Meta Title {validation.meta_title.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Meta Tag <span className='required-icon'>*</span></label>
-                  <textarea type="text" placeholder='Enter Meta Title' name="meta_tags"
-                    value={customizedPackageData?.meta_tags}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.meta_tags?.status === false && validation?.meta_tags?.message && (
-                    <p className='error-para'>Meta Tag {validation.meta_tags.message}</p>
-                  )}
-
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Meta Description <span className='required-icon'>*</span></label>
-                  <textarea type="text" placeholder='Enter Meta Title' name="meta_description"
-                    value={customizedPackageData?.meta_description}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.meta_description?.status === false && validation?.meta_description?.message && (
-                    <p className='error-para'>Meta Description {validation.meta_description.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Video Links </label>
-                  <input type="text" placeholder='Enter Meta Title' name="video_link"
-                    value={customizedPackageData?.video_link}
-                    onChange={(e) => handleCustomizedPackageChange(e)}
-                  />
-                  {validation?.video_link?.status === false && validation?.video_link?.message && (
-                    <p className='error-para'>Video Link {validation.video_link.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className="admin-input-div">
-                  <label>Gallery <span className='required-icon'>*</span></label>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="form-control"
-                    onChange={(e) => handleMultipleFileUpload(e, "gallery_images")}
-                  />
-                  {validation?.gallery_images?.status === false && validation?.gallery_images?.message && (
-                    <p className='error-para'>Hero Slider Images {validation.gallery_images.message}</p>
-                  )}
-
-                  {customizedPackageData?.gallery_images && customizedPackageData?.gallery_images?.length > 0 && (
-                    <div className="d-flex flex-wrap">
-                      {customizedPackageData?.gallery_images?.map((image, index) => (
-                        <div className='upload-image-div destination-image-div'>
-                          <div>
-                            <img src={`${BACKEND_DOMAIN}${image}`} alt="Category-Preview" key={index} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Related Trips  <span className='required-icon'>*</span></label>
-                  <select>
-                    <option value="">Select Trips</option>
-                    <option value="">Bali Honey Moon</option>
-                    <option value="">Kerala BackWater</option>
-                    <option value="">Goa Beach Holiday</option>
-                  </select>
-                </div>
-              </div>
-
-              {customizedPackageData && Object.keys(customizedPackageData).length > 0 &&
-                <button className="create-common-btn mt-5" onClick={(e) => handleCustomPackageSubmit(e)}>Create Custom Package</button>
-              }
-
-
-
             </div>
-          </>
-        )}
+          </div>
+        );
 
-        {/* Fixed Departure Tabs */}
+      default:
+        return <div>Step Not Found</div>;
+    }
+  };
 
-        {activeTab == 2 && activeTripTab == 2 && (
+  return (
+    <div className="tour-container">
+      <ToastContainer position="top-right" autoClose={3000} />
+      <div className="tour-header">
+        <h2>Add New Trip</h2>
+        <p>Create a comprehensive travel package</p>
+      </div>
 
-          <>
-            <h3 className='my-3 mt-4 text-decoration-underline'>Fixed Departure</h3>
-            <div className='row'>
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Trip Title <span className='required-icon'>*</span></label>
-                  <input type="text" placeholder='Enter Trip Title' name="trip_title"
-                    value={fixedPackageData?.trip_title}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.trip_title?.status === false && validation?.trip_title?.message && (
-                    <p className='error-para'>Trip Title {validation.trip_title.message}</p>
-                  )}
-                </div>
+      <div className="progress-bar">
+        <div className="progress-bar-fill" style={{ width: progress }}></div>
+      </div>
+
+      <div className="stepper">
+        {steps.map((step, index) => {
+          const Icon = step.icon;
+          const active = index <= currentIndex;
+          return (
+            <button
+              key={step.id}
+              onClick={() => setActiveStep(step.id)}
+              className="step-button"
+            >
+              <div
+                className={`step-circle ${active ? "step-active" : "step-inactive"}`}
+              >
+                <Icon />
               </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Destination  <span className='required-icon'>*</span></label>
-                  <select name="destination" value={fixedPackageData?.destination}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                  >
-                    <option value="" defaultValue={""}>Select Destination</option>
-                    {destinationList?.map((item, index) => (
-                      <option key={index} value={item?._id}>{item?.destination_name}</option>
-                    ))}
-                  </select>
-                  {validation?.destination?.status === false && validation?.destination?.message && (
-                    <p className='error-para'>Destination {validation.destination.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Trip Category  <span className='required-icon'>*</span></label>
-                  <select name="trip_category" value={fixedPackageData?.trip_category}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  >
-                    <option value="" defaultValue={""}>Select Category</option>
-                    {categoryList?.map((item, index) => (
-                      <option key={index} value={item?._id}>{item?.name}</option>
-                    ))}
-                  </select>
-                  {validation?.trip_category?.status === false && validation?.trip_category?.message && (
-                    <p className='error-para'>Trip Category {validation.trip_category.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Slug <span className='required-icon'>*</span></label>
-                  <input type="text" placeholder='Enter Trip Title' name="slug"
-                    value={fixedPackageData?.slug}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.slug?.status === false && validation?.slug?.message && (
-                    <p className='error-para'>Slug {validation.slug.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Duration (Days) <span className='required-icon'>*</span></label>
-                  <input type="number" placeholder='Number of Days' name="days"
-                    value={fixedPackageData?.days}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                    onWheelCapture={e => { e.target.blur() }}
-                    onKeyDown={(evt) => ["e", "E", "+", "-",].includes(evt.key) && evt.preventDefault()} />
-                  {validation?.days?.status === false && validation?.days?.message && (
-                    <p className='error-para'>Days {validation.days.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Nights <span className='required-icon'>*</span></label>
-                  <input type="number" placeholder='Number of Nights' name="nights"
-                    value={fixedPackageData?.days > 0 ? fixedPackageData.days - 1 : ""}
-                    readOnly
-                    onWheelCapture={e => { e.target.blur() }}
-                    onKeyDown={(evt) => ["e", "E", "+", "-", "-1"].includes(evt.key) && evt.preventDefault()} />
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Short Description / Tagline <span className='required-icon'>*</span></label>
-                  <textarea type="text" placeholder='Short Description For Listing Pages' name="short_description"
-                    value={fixedPackageData?.short_description}
-                    className="form-control"
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.short_description?.status === false && validation?.short_description?.message && (
-                    <p className='error-para'>Short Description {validation.short_description.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Select Featured Trip Page </label>
-                  <select onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                    name="featured_trip_page"
-                    value={fixedPackageData?.featured_trip_page}>
-                    <option value="" defaultValue={""}>Select Featured Page</option>
-                    <option value="Home">Home</option>
-                    <option value="Destination">Destination</option>
-                    <option value="Payment Page">Payment Page</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Pickup Location <span className='required-icon'>*</span></label>
-                  <input type="text" placeholder='Enter Pickup Location' name="pickup_location"
-                    value={fixedPackageData?.pickup_location}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.pickup_location?.status === false && validation?.pickup_location?.message && (
-                    <p className='error-para'>Pickup Location {validation.pickup_location.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Drop Location <span className='required-icon'>*</span></label>
-                  <input type="text" placeholder='Enter Drop Location' name="drop_location"
-                    value={fixedPackageData?.drop_location}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.drop_location?.status === false && validation?.drop_location?.message && (
-                    <p className='error-para'>Drop Location {validation.drop_location.message}</p>
-                  )}
-                </div>
-              </div>
-
-
-            </div>
-          </>
-
-        )}
-
-        {activeTab == 3 && activeTripTab == 2 && (
-          <>
-            <h3 className='my-3 mt-4 text-decoration-underline'>Fixed Package</h3>
-            <div className='row'>
-              <div className='col-lg-12'>
-                <div className='admin-input-div'>
-                  <label className='text-area-label'>Long Description <span className='required-icon'>*</span></label>
-                  <div className="mt-2">
-                    <JoditEditor
-                      ref={editor}
-                      value={fixedPackageData?.long_description || ""}
-                      config={{
-                        readonly: false,
-                        height: 300,
-                        toolbarButtonSize: "middle",
-                        askBeforePasteHTML: false,
-                        askBeforePasteFromWord: false,
-                        defaultActionOnPaste: "insert_clear_html",
-                        allowPaste: true
-                      }}
-                      tabIndex={1}
-                      onBlur={(newContent) =>
-                        setFixedPackageData({
-                          ...fixedPackageData,
-                          long_description: newContent,
-                        })
-                      }
-                    />
-                    {validation?.long_description?.status === false && validation?.long_description?.message && (
-                      <p className='error-para'>Long Description {validation.long_description.message}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Tags to be used in search </label>
-                  <CreatableSelect
-                    isMulti
-                    placeholder="Type and Enter Tags"
-                    value={selectedCreatedTags}
-                    onChange={handleCreatedTags}
-                    onCreateOption={handleCreateOption}
-                  />
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className="admin-input-div">
-                  <label>Primary Trip Image <span className='required-icon'>*</span></label>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="form-control"
-                    onChange={(e) => handleFileUpload(e, "primary_trip_image", "fixed_departure")}
-                  />
-                  {validation?.primary_trip_image?.status === false && validation?.primary_trip_image?.message && (
-                    <p className='error-para'>Primary Trip Image {validation.primary_trip_image.message}</p>
-                  )}
-                  {fixedPackageData?.primary_trip_image && (
-                    <div className='upload-image-div destination-image-div'>
-                      <div className='upload-image-div'>
-                        <img src={`${BACKEND_DOMAIN}${fixedPackageData?.primary_trip_image}`} alt="Category-Preview" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-12'>
-                <div className='col-lg-6'>
-                  <div className="admin-input-div">
-                    <label>Add Hero Slider Images <span className='required-icon'>*</span></label>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      className="form-control"
-                      onChange={(e) => handleMultipleFileUpload(e, "hero_slider_images", 0, "fixed_departure")}
-                    />
-                    {validation?.hero_slider_images?.status === false && validation?.hero_slider_images?.message && (
-                      <p className='error-para'>Hero Slider Images {validation.hero_slider_images.message}</p>
-                    )}
-
-                    {fixedPackageData?.hero_slider_images && fixedPackageData?.hero_slider_images?.length > 0 && (
-                      <div className="d-flex flex-wrap">
-                        {fixedPackageData?.hero_slider_images?.map((image, index) => (
-                          <div className='upload-image-div destination-image-div'>
-                            <div>
-                              <img src={`${BACKEND_DOMAIN}${image}`} alt="Category-Preview" key={index} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              </div>
-
-            </div>
-
-            {activeTripTab == 2 && (
-              <div className='itenary-main my-5'>
-                <div className='admin-input-div mt-0'>
-                  <label>Fixed Departure Details</label>
-                </div>
-
-                <div className='itenary-list-main mt-4 '>
-                  <div className='itenary-content mb-5'>
-                    <h5 className='text-center'>Manage Departures & Slots</h5>
-                  </div>
-
-                  <div className="destination-faq">
-                    <div className="accordion" id="departureAccordion">
-                      {departureSlots.map((slots, index) => (
-                        <div className='mt-4'>
-                          <div className="accordion-item" key={index} >
-                            <h2 className="accordion-header d-flex align-items-center justify-content-between">
-                              <button
-                                className="accordion-button flex-grow-1 fw-bold"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target={`#departureCollapse${index}`}
-                                aria-expanded="true"
-                                aria-controls={`departureCollapse${index}`}
-                              >
-                                Departure {index + 1}
-                              </button>
-                              <div className="ms-3 d-flex gap-2">
-                                <button className="destination-faq-add me-3" onClick={addDepartureSlots}>
-                                  Add
-                                </button>
-                                {index !== 0 && (
-                                  <button
-                                    className="destination-faq-add faq-delete me-4 "
-                                    onClick={() => deleteDepartureSlots(index)}
-                                  >
-                                    Delete
-                                  </button>
-                                )}
-                              </div>
-                            </h2>
-
-                            <div
-                              id={`departureCollapse${index}`}
-                              className="accordion-collapse collapse show"
-                              data-bs-parent="#departureAccordion"
-                            >
-                              <div className="accordion-body">
-
-                                <div className='row'>
-                                  <div className='col-lg-6'>
-                                    <div className='admin-input-div mt-0'>
-                                      <label>Start Date<span className='required-icon'>*</span></label>
-                                      <DatePicker
-                                        selected={departureSlots[index].start_date ? new Date(departureSlots[index].start_date) : null}
-                                        onChange={(date) => updateDepartureSlots(index, "start_date", date)}
-                                        onBlur={() => handleBlurDepartureSlots("start_date", departureSlots[index].start_date, index)}
-                                        placeholderText="Select Start Date"
-                                        minDate={new Date()}
-                                        className="w-100"
-                                      />
-                                      {departureSlotsValidation[index]?.start_date?.status === false && (
-                                        <p className='error-para'>Start Date {departureSlotsValidation[index]?.start_date?.message}</p>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div className='col-lg-6 '>
-                                    <div className='admin-input-div mt-0'>
-                                      <label>End Date</label>
-                                      <DatePicker
-                                        selected={departureSlots[index].end_date ? new Date(departureSlots[index].end_date) : null}
-                                        onChange={(date) => updateDepartureSlots(index, "end_date", date)}
-                                        onBlur={() => handleBlurDepartureSlots("end_date", departureSlots[index].end_date, index)}
-                                        placeholderText="Select End Date"
-                                        minDate={new Date()}
-                                        className="w-100"
-                                      />
-                                      {departureSlotsValidation[index]?.end_date?.status === false && (
-                                        <p className='error-para'>End Date {departureSlotsValidation[index]?.end_date?.message}</p>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div className='col-lg-6'>
-                                    <div className='admin-input-div'>
-                                      <label>Total Slots <span className='required-icon'>*</span></label>
-                                      <input type="number" placeholder='Enter Total No Of Slots'
-                                        value={departureSlots[index].total_slots}
-                                        onChange={(e) => updateDepartureSlots(index, "total_slots", e.target.value)}
-                                        onBlur={() => handleBlurDepartureSlots("total_slots", departureSlots[index].total_slots, index)}
-                                        onWheelCapture={e => { e.target.blur() }}
-                                        onKeyDown={(evt) => ["e", "E", "+", "-", "-1"].includes(evt.key) && evt.preventDefault()} />
-                                      {departureSlotsValidation[index]?.total_slots?.status === false && (
-                                        <p className='error-para'>Total Slots {departureSlotsValidation[index]?.total_slots?.message}</p>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div className='col-lg-6'>
-                                    <div className='admin-input-div'>
-                                      <label>Available Slots <span className='required-icon'>*</span></label>
-                                      <input type="number" placeholder='Enter Available Slots'
-                                        value={departureSlots[index].available_slots}
-                                        onBlur={(e) => handleBlurDepartureSlots("available_slots", departureSlots[index].available_slots, index)}
-                                        onChange={(e) => updateDepartureSlots(index, "available_slots", e.target.value)}
-                                        onWheelCapture={e => { e.target.blur() }}
-                                        onKeyDown={(evt) => ["e", "E", "+", "-", "-1"].includes(evt.key) && evt.preventDefault()} />
-                                      {departureSlotsValidation[index]?.available_slots?.status === false && (
-                                        <p className='error-para'>Available Slots {departureSlotsValidation[index].available_slots.message}</p>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div className='col-lg-6'>
-                                    <div className='admin-input-div'>
-                                      <label>Price Override (Optional)</label>
-                                      <input type="number" placeholder='Special Price For This Departure'
-                                        value={departureSlots[index].special_price}
-                                        onChange={(e) => updateDepartureSlots(index, "special_price", e.target.value)}
-                                        onWheelCapture={e => { e.target.blur() }}
-                                        onKeyDown={(evt) => ["e", "E", "+", "-", "-1"].includes(evt.key) && evt.preventDefault()} />
-                                    </div>
-                                  </div>
-
-                                  <div className='col-lg-6'>
-                                    <div className='admin-input-div'>
-                                      <label>Status  <span className='required-icon'>*</span></label>
-                                      <select value={departureSlots[index].status}
-                                        onChange={(e) => updateDepartureSlots(index, "status", e.target.value)}
-                                        onBlur={(e) => handleBlurDepartureSlots("status", departureSlots[index].status, index)}>
-                                        <option value="">Select Status</option>
-                                        <option value="Available">Available</option>
-                                        <option value="Booked_Out">Booked Out</option>
-                                        <option value="Cancelled">Cancelled</option>
-                                      </select>
-                                      {departureSlotsValidation[index]?.status?.status === false && (
-                                        <p className='error-para'>Status {departureSlotsValidation[index].status.message}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTripTab == 2 && (
-              <div className='itenary-main my-5'>
-                <div className='admin-input-div mt-0'>
-                  <label>Day Wise Itenary </label>
-                </div>
-
-                <div className='itenary-list-main mt-4 '>
-                  <div className='itenary-content mb-5'>
-                    <h5 className='text-center'>Itinerary Builder</h5>
-                    <p className='text-center'>Create day-by-day itinerary for your customized package</p>
-                  </div>
-
-                  <div className="destination-faq">
-                    <div className="accordion" id="itineraryAccordion">
-                      {itinerarys.map((itinerary, index) => (
-                        <div className='mt-4'>
-                          <div className="accordion-item" key={index} >
-                            <h2 className="accordion-header d-flex align-items-center justify-content-between">
-                              <button
-                                className="accordion-button flex-grow-1 fw-bold"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target={`#itineraryCollapse${index}`}
-                                aria-expanded="true"
-                                aria-controls={`itineraryCollapse${index}`}
-                              >
-                                DAY {index + 1}
-                              </button>
-                              <div className="ms-3 d-flex gap-2">
-                                <button className="destination-faq-add me-3" onClick={addItinerary}>
-                                  Add
-                                </button>
-                                {index !== 0 && (
-                                  <button
-                                    className="destination-faq-add faq-delete me-4"
-                                    onClick={() => deleteItinerary(index)}
-                                  >
-                                    Delete
-                                  </button>
-                                )}
-                              </div>
-                            </h2>
-
-                            <div
-                              id={`itineraryCollapse${index}`}
-                              className="accordion-collapse collapse show"
-                              data-bs-parent="#itineraryAccordion"
-                            >
-                              <div className="accordion-body">
-                                <div className="admin-input-div mb-3">
-                                  <label className=''>Day Title <span className='required-icon'>*</span></label>
-                                  <input
-                                    type="text"
-                                    className="form-control"
-                                    value={itinerary?.day_title}
-                                    placeholder="Enter Day Title"
-                                    onChange={(e) =>
-                                      updateItinerary(index, "day_title", e.target.value)
-                                    }
-                                    onBlur={() => handleBlurCustomizedItinerary(index)}
-                                  />
-                                  {validation[`itinerarys_${index}_day_title`]?.status === false && (
-                                    <div className="text-danger small">
-                                      {validation[`itinerarys_${index}_day_title`].message}
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="admin-input-div admin-desti-faq">
-                                  <label>Day Description <span className='required-icon'>*</span></label>
-                                  <JoditEditor
-                                    ref={editor}
-                                    value={itinerary?.day_description}
-                                    config={{
-                                      readonly: false,
-                                      height: 350,
-                                      toolbarButtonSize: "middle",
-                                      askBeforePasteHTML: false,
-                                      askBeforePasteFromWord: false,
-                                      defaultActionOnPaste: "insert_clear_html",
-                                      allowPaste: true
-                                    }}
-                                    tabIndex={1}
-                                    onBlur={(value) => {
-                                      handleBlurCustomizedItinerary(index);
-                                      updateItinerary(index, "day_description", value);
-                                    }}
-                                  />
-                                  {validation[`itinerarys_${index}_day_description`]?.status === false && (
-                                    <div className="text-danger small">
-                                      {validation[`itinerarys_${index}_day_description`].message}
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className='col-lg-6'>
-                                  <div className='admin-input-div'>
-                                    <label>Select Activity</label>
-                                    <Select
-                                      isMulti
-                                      placeholder="Select Activity"
-                                      options={activityOptions}
-                                      value={activityOptions.filter(opt => selectedActivities.includes(opt.value))}
-                                      onChange={(selected) =>
-                                        setSelectedActivities(selected ? selected.map(item => item.value) : [])
-                                      }
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="admin-input-div admin-desti-faq">
-                                  <label>Day Images (Optional) </label>
-                                  <input
-                                    type="file"
-                                    multiple
-                                    accept="image/*"
-                                    className="form-control"
-                                    onChange={(e) => handleMultipleFileUpload(e, "day_images", index)}
-                                  />
-
-
-                                  {itinerary?.day_images && itinerary?.day_images?.length > 0 && (
-                                    <div className="d-flex flex-wrap">
-                                      {itinerary?.day_images?.map((image, index) => (
-                                        <div className='upload-image-div destination-image-div'>
-                                          <div>
-                                            <img src={`${BACKEND_DOMAIN}${image}`} alt="Category-Preview" key={index} />
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {activeTab == 4 && activeTripTab == 2 && (
-          <>
-
-            {activeTripTab == 2 && (
-              <div className='d-flex mb-4'>
-                <div className={`trip-type-card ${activePricingTab === 1 ? 'active' : ''} pricing-tab-card`} onClick={() => setActivePricingTab(1)}>
-                  <div className='d-flex flex-column trip-type-card-content ms-2'>
-                    <h6>{PricingTab[1]?.head}</h6>
-                    <p>{PricingTab[1]?.para}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className='itenary-main my-5'>
-
-              <h5 className='fw-bold mb-4'>Price Configuration</h5>
-
-              <div className='row'>
-
-                <div className='col-lg-6'>
-                  <div className='admin-input-div mt-0'>
-                    <label>Base Price <span className='required-icon'>*</span></label>
-                    <input type="number" placeholder='Base Price' name='base_price'
-                      value={fixedPricePerPerson?.base_price}
-                      onChange={(e) => handleFixedPricePerPersonChange("base_price", e.target.value)}
-                      onBlur={(e) => handleFixedPricePerPersonBlur(e.target.name, e.target.value)}
-                      onWheelCapture={e => { e.target.blur() }}
-                      onKeyDown={(evt) => ["e", "E", "+", "-"].includes(evt.key) && evt.preventDefault()}
-                    />
-                    {fixedPricePerPersonValidation?.base_price?.status === false && fixedPricePerPersonValidation?.base_price?.message && (
-                      <p className='error-para'>Base Pricing {fixedPricePerPersonValidation.base_price.message}</p>
-                    )}
-                  </div>
-                </div>
-
-
-                <div className='col-lg-6'>
-                  <div className='admin-input-div mt-0'>
-                    <label>Currency  <span className='required-icon'>*</span></label>
-                    <select value={fixedPricePerPerson?.currency} name='currency'
-                      onChange={(e) => handleFixedPricePerPersonChange('currency', e.target.value)}
-                      onBlur={(e) => handleFixedPricePerPersonBlur(e.target.name, e.target.value)}>
-                      <option value="" defaultValue={""}>Select Currency</option>
-                      <option value="INR">INR (₹)</option>
-                      <option value="USD">USD ($)</option>
-                      <option value="EURO">EURO (€)</option>
-                    </select>
-                    {fixedPricePerPersonValidation?.currency?.status === false && fixedPricePerPersonValidation?.currency?.message && (
-                      <p className='error-para'>Currency {fixedPricePerPersonValidation.currency.message}</p>
-                    )}
-                  </div>
-                </div>
-
-
-                <div className='col-lg-6'>
-                  <div className='admin-input-div'>
-                    <label>Discounted Price (Optional)</label>
-                    <input type="number" placeholder='Enter Discounted Price'
-                      value={fixedPricePerPerson?.discount_price} name='discount_price'
-                      onChange={(e) => handleFixedPricePerPersonChange("discount_price", e.target.value)}
-                      onWheelCapture={e => { e.target.blur() }}
-                      onKeyDown={(evt) => ["e", "E", "+", "-"].includes(evt.key) && evt.preventDefault()} />
-                    {fixedPricePerPersonValidation?.discount_price?.status === false && fixedPricePerPersonValidation?.discount_price?.message && (
-                      <p className='error-para'>Discounted Price {fixedPricePerPersonValidation.discount_price.message}</p>
-                    )}
-                  </div>
-                </div>
-
-
-                <div className='col-lg-4'>
-                  <div className='admin-input-div'>
-                    <label>Display as "Starts From" Price</label>
-                    <select value={fixedPricePerPerson?.start_from} name='start_from'
-                      onChange={(e) => handleFixedPricePerPersonChange("start_from", e.target.value)}>
-                      <option value="" defaultValue={""}>Select Dispay Type</option>
-                      <option value="yes">Yes</option>
-                      <option value="no">No</option>
-                    </select>
-                  </div>
-                </div>
-
-                {activeTripTab == 2 && (
-                  <>
-                    <div className='col-lg-6'>
-                      <div className='admin-input-div'>
-                        <label>Double Occupancy <span className='required-icon'>*</span></label>
-                        <input type="number" placeholder='Enter Price'
-                          value={fixedPricePerPerson?.double_occupancy} name='double_occupancy'
-                          onChange={(e) => handleFixedPricePerPersonChange("double_occupancy", e.target.value)}
-                          onBlur={(e) => handleFixedPricePerPersonBlur(e.target.name, e.target.value)}
-                          onWheelCapture={e => { e.target.blur() }}
-                          onKeyDown={(evt) => ["e", "E", "+", "-"].includes(evt.key) && evt.preventDefault()} />
-                        {fixedPricePerPersonValidation?.double_occupancy?.status === false && fixedPricePerPersonValidation?.double_occupancy?.message && (
-                          <p className='error-para'>Double Occupancy {fixedPricePerPersonValidation.double_occupancy.message}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className='col-lg-6'>
-                      <div className='admin-input-div'>
-                        <label>Triple Occupancy <span className='required-icon'>*</span></label>
-                        <input type="number" placeholder='Enter Price'
-                          value={fixedPricePerPerson?.triple_occupancy} name='triple_occupancy'
-                          onChange={(e) => handleFixedPricePerPersonChange("triple_occupancy", e.target.value)}
-                          onBlur={(e) => handleFixedPricePerPersonBlur(e.target.name, e.target.value)}
-                          onWheelCapture={e => { e.target.blur() }}
-                          onKeyDown={(evt) => ["e", "E", "+", "-"].includes(evt.key) && evt.preventDefault()} />
-                        {fixedPricePerPersonValidation?.triple_occupancy?.status === false && fixedPricePerPersonValidation?.triple_occupancy?.message && (
-                          <p className='error-para'>Double Occupancy {fixedPricePerPersonValidation.triple_occupancy.message}</p>
-                        )}
-                      </div>
-                    </div>
-
-
-                    <div className='col-lg-6'>
-                      <div className='admin-input-div'>
-                        <label>Quad Occupancy <span className='required-icon'>*</span></label>
-                        <input type="number" placeholder='Enter Price'
-                          value={fixedPricePerPerson?.quad_occupancy} name='quad_occupancy'
-                          onChange={(e) => handleFixedPricePerPersonChange("quad_occupancy", e.target.value)}
-                          onBlur={(e) => handleFixedPricePerPersonBlur(e.target.name, e.target.value)}
-                          onWheelCapture={e => { e.target.blur() }}
-                          onKeyDown={(evt) => ["e", "E", "+", "-"].includes(evt.key) && evt.preventDefault()} />
-                        {fixedPricePerPersonValidation?.quad_occupancy?.status === false && fixedPricePerPersonValidation?.quad_occupancy?.message && (
-                          <p className='error-para'>Double Occupancy {fixedPricePerPersonValidation.quad_occupancy.message}</p>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-
-              </div>
-
-            </div>
-
-            <div className='row'>
-              <div className='col-lg-12'>
-                <div className='admin-input-div'>
-                  <label className='text-area-label'>Inclusion <span className='required-icon'>*</span></label>
-                  <div className="mt-2">
-                    <JoditEditor
-                      ref={editor}
-                      value={fixedPricePerPerson?.inclusion}
-                      config={{
-                        readonly: false,
-                        height: 350,
-                        toolbarButtonSize: "middle",
-                        askBeforePasteHTML: false,
-                        askBeforePasteFromWord: false,
-                        defaultActionOnPaste: "insert_clear_html",
-                        allowPaste: true
-                      }}
-                      tabIndex={1}
-                      onBlur={(newContent) => handleFixedPricePerPersonChange("inclusion", newContent)}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className='col-lg-12'>
-                <div className='admin-input-div'>
-                  <label className='text-area-label'>Exclusion <span className='required-icon'>*</span></label>
-                  <div className="mt-2">
-                    <JoditEditor
-                      ref={editor}
-                      value={fixedPricePerPerson?.exclusion}
-                      config={{
-                        readonly: false,
-                        height: 350,
-                        toolbarButtonSize: "middle",
-                        askBeforePasteHTML: false,
-                        askBeforePasteFromWord: false,
-                        defaultActionOnPaste: "insert_clear_html",
-                        allowPaste: true
-                      }}
-                      tabIndex={1}
-                      onBlur={(newContent) => handleFixedPricePerPersonChange("exclusion", newContent)}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className='col-lg-12'>
-                <div className='admin-input-div'>
-                  <label className='text-area-label'>Key Highlights/Features <span className='required-icon'>*</span></label>
-                  <div className="mt-2">
-                    <JoditEditor
-                      ref={editor}
-                      value={fixedPricePerPerson?.key_highlights}
-                      config={{
-                        readonly: false,
-                        height: 350,
-                        toolbarButtonSize: "middle",
-                        askBeforePasteHTML: false,
-                        askBeforePasteFromWord: false,
-                        defaultActionOnPaste: "insert_clear_html",
-                        allowPaste: true
-                      }}
-                      tabIndex={1}
-                      onBlur={(newContent) => handleFixedPricePerPersonChange("key_highlights", newContent)}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className='col-lg-12'>
-                <div className='admin-input-div'>
-                  <label className='text-area-label'>Cancellation Policy <span className='required-icon'>*</span></label>
-                  <div className="mt-2">
-                    <JoditEditor
-                      ref={editor}
-                      value={fixedPricePerPerson?.cancellation_policy}
-                      config={{
-                        readonly: false,
-                        height: 350,
-                        toolbarButtonSize: "middle",
-                        askBeforePasteHTML: false,
-                        askBeforePasteFromWord: false,
-                        defaultActionOnPaste: "insert_clear_html",
-                        allowPaste: true
-                      }}
-                      tabIndex={1}
-                      onBlur={(newContent) => handleFixedPricePerPersonChange("cancellation_policy", newContent)}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </>
-        )}
-
-        {activeTab == 5 && activeTripTab == 2 && (
-          <>
-            <h3 className='my-3 mt-4 text-decoration-underline'>Fixed Package</h3>
-            <div className='row'>
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Meta Title <span className='required-icon'>*</span></label>
-                  <textarea type="text" placeholder='Enter Meta Title' name="meta_title"
-                    value={fixedPackageData?.meta_title}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.meta_title?.status === false && validation?.meta_title?.message && (
-                    <p className='error-para'>Meta Title {validation.meta_title.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Meta Tag <span className='required-icon'>*</span></label>
-                  <textarea type="text" placeholder='Enter Meta Title' name="meta_tags"
-                    value={fixedPackageData?.meta_tags}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.meta_tags?.status === false && validation?.meta_tags?.message && (
-                    <p className='error-para'>Meta Tag {validation.meta_tags.message}</p>
-                  )}
-
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Meta Description <span className='required-icon'>*</span></label>
-                  <textarea type="text" placeholder='Enter Meta Title' name="meta_description"
-                    value={fixedPackageData?.meta_description}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                    onBlur={(e) => handleBlurCustomized(e.target.name, e.target.value)}
-                  />
-                  {validation?.meta_description?.status === false && validation?.meta_description?.message && (
-                    <p className='error-para'>Meta Description {validation.meta_description.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Video Links </label>
-                  <input type="text" placeholder='Enter Meta Title' name="video_link"
-                    value={fixedPackageData?.video_link}
-                    onChange={(e) => handleFixedPackageChange(e)}
-                  />
-                  {validation?.video_link?.status === false && validation?.video_link?.message && (
-                    <p className='error-para'>Video Link {validation.video_link.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className="admin-input-div">
-                  <label>Gallery <span className='required-icon'>*</span></label>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="form-control"
-                    onChange={(e) => handleMultipleFileUpload(e, "gallery_images", 0, "fixed_departure")}
-                  />
-                  {validation?.gallery_images?.status === false && validation?.gallery_images?.message && (
-                    <p className='error-para'>Gallery Images {validation.gallery_images.message}</p>
-                  )}
-
-                  {fixedPackageData?.gallery_images && fixedPackageData?.gallery_images?.length > 0 && (
-                    <div className="d-flex flex-wrap">
-                      {fixedPackageData?.gallery_images?.map((image, index) => (
-                        <div className='upload-image-div destination-image-div'>
-                          <div>
-                            <img src={`${BACKEND_DOMAIN}${image}`} alt="Category-Preview" key={index} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className='col-lg-6'>
-                <div className='admin-input-div'>
-                  <label>Related Trips  <span className='required-icon'>*</span></label>
-                  <select>
-                    <option value="">Select Trips</option>
-                    <option value="">Bali Honey Moon</option>
-                    <option value="">Kerala BackWater</option>
-                    <option value="">Goa Beach Holiday</option>
-                  </select>
-                </div>
-              </div>
-
-              {activeTripTab == 1 &&
-                <button className="create-common-btn mt-5" onClick={(e) => handleCustomPackageSubmit(e)}>Create Custom Package</button>
-              }
-
-              {activeTripTab == 2 &&
-                <button className="create-common-btn mt-5" onClick={(e) => handleFixedPackageSubmit(e)}>Create Fixed Package</button>
-              }
-
-            </div>
-          </>
-        )}
-
+              <span
+                className={`step-label ${active ? "step-label-active" : "step-label-inactive"}`}
+              >
+                {step.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {renderStepContent()}
+
+      <div
+        style={{
+          marginTop: "24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ color: "#6b7280", fontSize: "14px" }}>
+          {currentIndex + 1}/{steps.length} sections complete
+        </span>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button className="button button-secondary">Save Draft</button>
+          <button className="button button-secondary">Preview</button>
+          <button className="button button-green" onClick={handleSubmit}>
+            Publish Trip
+          </button>
+        </div>
       </div>
     </div>
-  )
+  );
 }
-
-export default TourCreation
